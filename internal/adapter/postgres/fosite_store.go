@@ -10,17 +10,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anthropic/oidc-platform/internal/service"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ory/fosite"
 )
 
 type FositeStore struct {
-	db *pgxpool.Pool
+	db           *pgxpool.Pool
+	secretCipher *service.SecretCipher
 }
 
-func NewFositeStore(db *pgxpool.Pool) *FositeStore {
-	return &FositeStore{db: db}
+func NewFositeStore(db *pgxpool.Pool, secretCipher *service.SecretCipher) *FositeStore {
+	return &FositeStore{db: db, secretCipher: secretCipher}
 }
 
 // ---------------------------------------------------------------------------
@@ -38,14 +40,14 @@ type fositeClient struct {
 	audience      []string
 }
 
-func (c *fositeClient) GetID() string                       { return c.id }
-func (c *fositeClient) GetHashedSecret() []byte             { return []byte(c.secret) }
-func (c *fositeClient) GetRedirectURIs() []string           { return c.redirectURIs }
-func (c *fositeClient) GetGrantTypes() fosite.Arguments     { return fosite.Arguments(c.grantTypes) }
-func (c *fositeClient) GetResponseTypes() fosite.Arguments  { return fosite.Arguments(c.responseTypes) }
-func (c *fositeClient) GetScopes() fosite.Arguments         { return fosite.Arguments(c.scopes) }
-func (c *fositeClient) IsPublic() bool                      { return c.public }
-func (c *fositeClient) GetAudience() fosite.Arguments       { return fosite.Arguments(c.audience) }
+func (c *fositeClient) GetID() string                      { return c.id }
+func (c *fositeClient) GetHashedSecret() []byte            { return []byte(c.secret) }
+func (c *fositeClient) GetRedirectURIs() []string          { return c.redirectURIs }
+func (c *fositeClient) GetGrantTypes() fosite.Arguments    { return fosite.Arguments(c.grantTypes) }
+func (c *fositeClient) GetResponseTypes() fosite.Arguments { return fosite.Arguments(c.responseTypes) }
+func (c *fositeClient) GetScopes() fosite.Arguments        { return fosite.Arguments(c.scopes) }
+func (c *fositeClient) IsPublic() bool                     { return c.public }
+func (c *fositeClient) GetAudience() fosite.Arguments      { return fosite.Arguments(c.audience) }
 
 // ---------------------------------------------------------------------------
 // ClientManager
@@ -60,7 +62,7 @@ func (s *FositeStore) GetClient(ctx context.Context, id string) (fosite.Client, 
 		isPublic                     bool
 	)
 	err := s.db.QueryRow(ctx,
-		`SELECT client_id, client_secret_hash, redirect_uris, grant_types, response_types,
+		`SELECT client_id, client_secret_encrypted, redirect_uris, grant_types, response_types,
 		 scopes, audience, token_endpoint_auth_method, is_public
 		 FROM oidc_clients WHERE client_id = $1 AND is_active = TRUE`,
 		id,
@@ -71,9 +73,13 @@ func (s *FositeStore) GetClient(ctx context.Context, id string) (fosite.Client, 
 		}
 		return nil, err
 	}
+	plainSecret, err := s.secretCipher.Decrypt(secret)
+	if err != nil {
+		return nil, err
+	}
 	return &fositeClient{
 		id:            clientID,
-		secret:        secret,
+		secret:        plainSecret,
 		redirectURIs:  redirectURIs,
 		grantTypes:    grantTypes,
 		responseTypes: responseTypes,
@@ -176,7 +182,9 @@ func (s *FositeStore) saveSession(ctx context.Context, table, signature string, 
 	}
 	var expiresAt *time.Time
 	if sess := req.GetSession(); sess != nil {
-		if e, ok := sess.(interface{ GetExpiresAt(fosite.TokenType) time.Time }); ok {
+		if e, ok := sess.(interface {
+			GetExpiresAt(fosite.TokenType) time.Time
+		}); ok {
 			t := e.GetExpiresAt(fosite.AccessToken)
 			if !t.IsZero() {
 				expiresAt = &t

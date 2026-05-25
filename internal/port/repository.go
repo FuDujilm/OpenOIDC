@@ -47,7 +47,7 @@ type ClientRepository interface {
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, offset, limit int) ([]*domain.OIDCClient, int64, error)
 	Update(ctx context.Context, c *domain.OIDCClient) error
 	Delete(ctx context.Context, id uuid.UUID) error
-	UpdateSecret(ctx context.Context, id uuid.UUID, hash, plain string) error
+	UpdateSecret(ctx context.Context, id uuid.UUID, encrypted string) error
 }
 
 type ClientAccessRuleRepository interface {

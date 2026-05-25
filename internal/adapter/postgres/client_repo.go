@@ -21,8 +21,8 @@ func NewClientRepo(db *pgxpool.Pool) *ClientRepo {
 	return &ClientRepo{db: db}
 }
 
-const clientColumns = `id, client_id, client_secret_hash, client_secret_plain, name, description, logo_url, homepage_url, owner_id,
-	redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
+const clientColumns = `id, client_id, client_secret_encrypted, name, description, logo_url, homepage_url, owner_id,
+	redirect_uris, post_logout_redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
 	min_security_level, require_email_verified, protocol_type, is_active, is_public, is_confidential, created_at, updated_at`
 
 func scanClient(row pgx.Row) (*domain.OIDCClient, error) {
@@ -30,8 +30,8 @@ func scanClient(row pgx.Row) (*domain.OIDCClient, error) {
 	var ownerID *uuid.UUID
 	var isPublic bool
 	err := row.Scan(
-		&c.ID, &c.ClientID, &c.ClientSecretHash, &c.ClientSecretPlain, &c.ClientName, &c.Description, &c.LogoURL, &c.HomepageURL, &ownerID,
-		&c.RedirectURIs, &c.GrantTypes, &c.ResponseTypes, &c.Scopes, &c.TokenEndpointAuthMethod,
+		&c.ID, &c.ClientID, &c.ClientSecretEncrypted, &c.ClientName, &c.Description, &c.LogoURL, &c.HomepageURL, &ownerID,
+		&c.RedirectURIs, &c.PostLogoutRedirectURIs, &c.GrantTypes, &c.ResponseTypes, &c.Scopes, &c.TokenEndpointAuthMethod,
 		&c.MinSecurityLevel, &c.RequireEmailVerified, &c.ProtocolType, &c.IsActive, &isPublic, &c.IsConfidential, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
@@ -56,14 +56,14 @@ func (r *ClientRepo) Create(ctx context.Context, c *domain.OIDCClient) error {
 
 	query := `
 		INSERT INTO oidc_clients (
-			id, client_id, client_secret_hash, client_secret_plain, name, description, logo_url, homepage_url, owner_id,
-			redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
+			id, client_id, client_secret_encrypted, name, description, logo_url, homepage_url, owner_id,
+			redirect_uris, post_logout_redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
 			min_security_level, require_email_verified, protocol_type, is_active, is_public, is_confidential, created_at, updated_at
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
 	`
 	_, err := r.db.Exec(ctx, query,
-		c.ID, c.ClientID, c.ClientSecretHash, c.ClientSecretPlain, c.ClientName, c.Description, c.LogoURL, c.HomepageURL, c.OwnerUserID,
-		c.RedirectURIs, c.GrantTypes, c.ResponseTypes, c.Scopes, c.TokenEndpointAuthMethod,
+		c.ID, c.ClientID, c.ClientSecretEncrypted, c.ClientName, c.Description, c.LogoURL, c.HomepageURL, c.OwnerUserID,
+		c.RedirectURIs, c.PostLogoutRedirectURIs, c.GrantTypes, c.ResponseTypes, c.Scopes, c.TokenEndpointAuthMethod,
 		c.MinSecurityLevel, c.RequireEmailVerified, c.ProtocolType, c.IsActive, !c.IsConfidential, c.IsConfidential, c.CreatedAt, c.UpdatedAt,
 	)
 	if err != nil {
@@ -165,14 +165,14 @@ func (r *ClientRepo) Update(ctx context.Context, c *domain.OIDCClient) error {
 	query := `
 		UPDATE oidc_clients SET
 			name = $2, description = $3, logo_url = $4, homepage_url = $5,
-			redirect_uris = $6, grant_types = $7, response_types = $8, scopes = $9,
-			token_endpoint_auth_method = $10, min_security_level = $11, require_email_verified = $12, protocol_type = $13,
-			is_active = $14, is_public = $15, is_confidential = $16, updated_at = $17
+			redirect_uris = $6, post_logout_redirect_uris = $7, grant_types = $8, response_types = $9, scopes = $10,
+			token_endpoint_auth_method = $11, min_security_level = $12, require_email_verified = $13, protocol_type = $14,
+			is_active = $15, is_public = $16, is_confidential = $17, updated_at = $18
 		WHERE id = $1
 	`
 	tag, err := r.db.Exec(ctx, query,
 		c.ID, c.ClientName, c.Description, c.LogoURL, c.HomepageURL,
-		c.RedirectURIs, c.GrantTypes, c.ResponseTypes, c.Scopes,
+		c.RedirectURIs, c.PostLogoutRedirectURIs, c.GrantTypes, c.ResponseTypes, c.Scopes,
 		c.TokenEndpointAuthMethod, c.MinSecurityLevel, c.RequireEmailVerified, c.ProtocolType,
 		c.IsActive, !c.IsConfidential, c.IsConfidential, c.UpdatedAt,
 	)
@@ -190,10 +190,10 @@ func (r *ClientRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-func (r *ClientRepo) UpdateSecret(ctx context.Context, id uuid.UUID, hash, plain string) error {
+func (r *ClientRepo) UpdateSecret(ctx context.Context, id uuid.UUID, encrypted string) error {
 	_, err := r.db.Exec(ctx,
-		`UPDATE oidc_clients SET client_secret_hash = $2, client_secret_plain = $3, updated_at = NOW() WHERE id = $1`,
-		id, hash, plain,
+		`UPDATE oidc_clients SET client_secret_encrypted = $2, updated_at = NOW() WHERE id = $1`,
+		id, encrypted,
 	)
 	return err
 }

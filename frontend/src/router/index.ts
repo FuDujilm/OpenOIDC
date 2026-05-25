@@ -78,8 +78,9 @@ router.beforeEach(async (to) => {
     await Promise.all([auth.fetchUser(), auth.fetchPublicSettings()])
   }
   if (to.meta.requiresAuth && !auth.isLoggedIn) return { path: '/login', query: { return_to: to.fullPath } }
+  if (auth.isLoggedIn && to.meta.requiresAuth) await auth.fetchDeveloperStatus()
   if (to.meta.requiresAdmin && !auth.isAdmin) return '/'
-  if (to.meta.requiresDeveloper && !auth.isDeveloper) return '/me'
+  if (to.meta.requiresDeveloper && !auth.canShowDeveloperConsole) return '/me'
 })
 
 export default router

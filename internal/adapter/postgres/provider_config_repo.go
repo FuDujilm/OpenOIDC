@@ -23,7 +23,7 @@ func NewProviderConfigRepo(db *pgxpool.Pool) *ProviderConfigRepo {
 }
 
 const providerConfigColumns = `id, provider, display_name, enabled, client_id, client_secret,
-	extra_config, created_at, updated_at`
+	extra_config, COALESCE(sort_order, 0), created_at, updated_at`
 
 func scanProviderConfig(row pgx.Row) (*domain.ProviderConfig, error) {
 	var pc domain.ProviderConfig
@@ -31,7 +31,7 @@ func scanProviderConfig(row pgx.Row) (*domain.ProviderConfig, error) {
 	var extra []byte
 	err := row.Scan(
 		&pc.ID, &pc.Provider, &pc.DisplayName, &pc.IsEnabled, &clientID, &clientSecret,
-		&extra, &pc.CreatedAt, &pc.UpdatedAt,
+		&extra, &pc.SortOrder, &pc.CreatedAt, &pc.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (r *ProviderConfigRepo) Get(ctx context.Context, provider string) (*domain.
 
 func (r *ProviderConfigRepo) List(ctx context.Context) ([]*domain.ProviderConfig, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT `+providerConfigColumns+` FROM provider_configs ORDER BY provider`,
+		`SELECT `+providerConfigColumns+` FROM provider_configs ORDER BY sort_order, provider`,
 	)
 	if err != nil {
 		return nil, err
@@ -114,17 +114,18 @@ func (r *ProviderConfigRepo) Upsert(ctx context.Context, pc *domain.ProviderConf
 
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO provider_configs
-		 (id, provider, display_name, enabled, client_id, client_secret, extra_config, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 (id, provider, display_name, enabled, client_id, client_secret, extra_config, sort_order, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT (provider) DO UPDATE SET
 		 display_name = EXCLUDED.display_name,
 		 enabled = EXCLUDED.enabled,
 		 client_id = EXCLUDED.client_id,
 		 client_secret = EXCLUDED.client_secret,
 		 extra_config = EXCLUDED.extra_config,
+		 sort_order = EXCLUDED.sort_order,
 		 updated_at = EXCLUDED.updated_at`,
 		pc.ID, pc.Provider, pc.DisplayName, pc.IsEnabled, clientID, clientSecret,
-		extra, pc.CreatedAt, pc.UpdatedAt,
+		extra, pc.SortOrder, pc.CreatedAt, pc.UpdatedAt,
 	)
 	return err
 }

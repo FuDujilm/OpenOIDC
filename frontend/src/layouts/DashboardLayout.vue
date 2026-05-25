@@ -41,7 +41,7 @@ function isActive(path: string) {
           OIDC
         </RouterLink>
         <div class="flex items-center gap-3">
-          <RouterLink v-if="auth.isDeveloper" to="/developer" class="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium px-3 py-2 flex items-center gap-1.5">
+          <RouterLink v-if="auth.canShowDeveloperConsole" to="/developer" class="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium px-3 py-2 flex items-center gap-1.5">
             <Code2 class="w-4 h-4" /> {{ $t('devNav.title') }}
           </RouterLink>
           <RouterLink v-if="auth.isAdmin" to="/admin" class="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium px-3 py-2">{{ $t('nav.admin') }}</RouterLink>

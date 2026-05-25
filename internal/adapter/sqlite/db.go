@@ -94,14 +94,14 @@ func RunMigrations(db *sql.DB) error {
 	CREATE TABLE IF NOT EXISTS oidc_clients (
 		id TEXT PRIMARY KEY,
 		client_id TEXT UNIQUE NOT NULL,
-		client_secret_hash TEXT NOT NULL DEFAULT '',
-		client_secret_plain TEXT NOT NULL DEFAULT '',
+		client_secret_encrypted TEXT NOT NULL DEFAULT '',
 		client_name TEXT NOT NULL DEFAULT '',
 		description TEXT NOT NULL DEFAULT '',
 		logo_url TEXT NOT NULL DEFAULT '',
 		homepage_url TEXT NOT NULL DEFAULT '',
 		owner_user_id TEXT,
 		redirect_uris TEXT NOT NULL DEFAULT '[]',
+		post_logout_redirect_uris TEXT NOT NULL DEFAULT '[]',
 		grant_types TEXT NOT NULL DEFAULT '[]',
 		response_types TEXT NOT NULL DEFAULT '[]',
 		scopes TEXT NOT NULL DEFAULT '[]',
@@ -254,8 +254,9 @@ func RunMigrations(db *sql.DB) error {
 
 	// Add columns for existing databases (idempotent).
 	alterStmts := []string{
-		`ALTER TABLE oidc_clients ADD COLUMN client_secret_plain TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE oidc_clients ADD COLUMN client_secret_encrypted TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE oidc_clients ADD COLUMN homepage_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE oidc_clients ADD COLUMN post_logout_redirect_uris TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE oidc_clients ADD COLUMN require_email_verified BOOLEAN NOT NULL DEFAULT 0`,
 		`ALTER TABLE oidc_clients ADD COLUMN is_confidential BOOLEAN NOT NULL DEFAULT 1`,
 		`ALTER TABLE oauth2_sessions ADD COLUMN subject TEXT NOT NULL DEFAULT ''`,
@@ -268,6 +269,7 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE social_bindings ADD COLUMN last_auth_check_at DATETIME`,
 		`ALTER TABLE social_bindings ADD COLUMN last_auth_status TEXT NOT NULL DEFAULT 'unknown'`,
 		`ALTER TABLE social_bindings ADD COLUMN last_auth_error TEXT`,
+		`ALTER TABLE provider_configs ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range alterStmts {
 		db.Exec(stmt) // ignore "duplicate column" errors

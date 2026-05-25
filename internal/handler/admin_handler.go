@@ -74,9 +74,13 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminUserUpdateRequest struct {
-	DisplayName *string            `json:"display_name"`
-	Status      *domain.UserStatus `json:"status"`
-	Role        *string            `json:"role"`
+	Email         *string            `json:"email"`
+	EmailVerified *bool              `json:"email_verified"`
+	DisplayName   *string            `json:"display_name"`
+	Alias         *string            `json:"alias"`
+	AvatarURL     *string            `json:"avatar_url"`
+	Status        *domain.UserStatus `json:"status"`
+	Role          *string            `json:"role"`
 }
 
 func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +122,15 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	upd := service.AdminUserUpdate{DisplayName: req.DisplayName, Status: req.Status, Role: req.Role}
+	upd := service.AdminUserUpdate{
+		Email:         req.Email,
+		EmailVerified: req.EmailVerified,
+		DisplayName:   req.DisplayName,
+		Alias:         req.Alias,
+		AvatarURL:     req.AvatarURL,
+		Status:        req.Status,
+		Role:          req.Role,
+	}
 	if err := h.adminSvc.UpdateUser(r.Context(), id, upd); err != nil {
 		mapAdminError(w, err)
 		return
@@ -232,21 +244,84 @@ func (h *AdminHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request)
 	JSON(w, http.StatusOK, map[string]any{"reset": true})
 }
 
+func (h *AdminHandler) RevokeUserSession(w http.ResponseWriter, r *http.Request) {
+	if h.sessionRepo == nil {
+		Error(w, http.StatusNotImplemented, "not_implemented", "session repository not available")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "invalid_id", err.Error())
+		return
+	}
+	sessionID, err := uuid.Parse(chi.URLParam(r, "session_id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "invalid_session_id", err.Error())
+		return
+	}
+	sessions, err := h.sessionRepo.ListByUser(r.Context(), id)
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	found := false
+	for _, session := range sessions {
+		if session.ID == sessionID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		Error(w, http.StatusNotFound, "not_found", "session not found for user")
+		return
+	}
+	if err := h.sessionRepo.Delete(r.Context(), sessionID); err != nil {
+		Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{"revoked": true})
+}
+
+func (h *AdminHandler) UnbindUserSocial(w http.ResponseWriter, r *http.Request) {
+	if h.bindingRepo == nil {
+		Error(w, http.StatusNotImplemented, "not_implemented", "binding repository not available")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "invalid_id", err.Error())
+		return
+	}
+	provider := strings.TrimSpace(chi.URLParam(r, "provider"))
+	if provider == "" {
+		Error(w, http.StatusBadRequest, "invalid_provider", "provider is required")
+		return
+	}
+	if err := h.bindingRepo.SoftUnbind(r.Context(), id, provider, "admin_unbound"); err != nil {
+		mapAdminError(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{"unbound": true})
+}
+
 // ---------------- Clients ----------------
 
 type createClientRequest struct {
-	ClientName           string     `json:"client_name"`
-	Description          string     `json:"description"`
-	LogoURL              string     `json:"logo_url"`
-	HomepageURL          string     `json:"homepage_url"`
-	OwnerUserID          *uuid.UUID `json:"owner_user_id"`
-	RedirectURIs         []string   `json:"redirect_uris"`
-	GrantTypes           []string   `json:"grant_types"`
-	Scopes               []string   `json:"scopes"`
-	MinSecurityLevel     int        `json:"min_security_level"`
-	RequireEmailVerified *bool      `json:"require_email_verified"`
-	ProtocolType         string     `json:"protocol_type"`
-	IsConfidential       bool       `json:"is_confidential"`
+	ClientName              string     `json:"client_name"`
+	Description             string     `json:"description"`
+	LogoURL                 string     `json:"logo_url"`
+	HomepageURL             string     `json:"homepage_url"`
+	OwnerUserID             *uuid.UUID `json:"owner_user_id"`
+	RedirectURIs            []string   `json:"redirect_uris"`
+	PostLogoutRedirectURIs  []string   `json:"post_logout_redirect_uris"`
+	GrantTypes              []string   `json:"grant_types"`
+	ResponseTypes           []string   `json:"response_types"`
+	Scopes                  []string   `json:"scopes"`
+	TokenEndpointAuthMethod string     `json:"token_endpoint_auth_method"`
+	MinSecurityLevel        int        `json:"min_security_level"`
+	RequireEmailVerified    *bool      `json:"require_email_verified"`
+	ProtocolType            string     `json:"protocol_type"`
+	IsConfidential          bool       `json:"is_confidential"`
 }
 
 func (h *AdminHandler) ListClients(w http.ResponseWriter, r *http.Request) {
@@ -294,18 +369,21 @@ func (h *AdminHandler) CreateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := service.CreateClientInput{
-		ClientName:           req.ClientName,
-		Description:          req.Description,
-		LogoURL:              req.LogoURL,
-		HomepageURL:          req.HomepageURL,
-		OwnerUserID:          req.OwnerUserID,
-		RedirectURIs:         req.RedirectURIs,
-		GrantTypes:           req.GrantTypes,
-		Scopes:               req.Scopes,
-		MinSecurityLevel:     req.MinSecurityLevel,
-		RequireEmailVerified: req.RequireEmailVerified,
-		ProtocolType:         req.ProtocolType,
-		IsConfidential:       req.IsConfidential,
+		ClientName:              req.ClientName,
+		Description:             req.Description,
+		LogoURL:                 req.LogoURL,
+		HomepageURL:             req.HomepageURL,
+		OwnerUserID:             req.OwnerUserID,
+		RedirectURIs:            req.RedirectURIs,
+		PostLogoutRedirectURIs:  req.PostLogoutRedirectURIs,
+		GrantTypes:              req.GrantTypes,
+		ResponseTypes:           req.ResponseTypes,
+		Scopes:                  req.Scopes,
+		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+		MinSecurityLevel:        req.MinSecurityLevel,
+		RequireEmailVerified:    req.RequireEmailVerified,
+		ProtocolType:            req.ProtocolType,
+		IsConfidential:          req.IsConfidential,
 	}
 	client, secret, err := h.clientSvc.CreateClient(r.Context(), input)
 	if err != nil {
@@ -332,16 +410,21 @@ func (h *AdminHandler) GetClient(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateClientRequest struct {
-	ClientName           *string  `json:"client_name"`
-	Description          *string  `json:"description"`
-	LogoURL              *string  `json:"logo_url"`
-	HomepageURL          *string  `json:"homepage_url"`
-	RedirectURIs         []string `json:"redirect_uris"`
-	GrantTypes           []string `json:"grant_types"`
-	Scopes               []string `json:"scopes"`
-	MinSecurityLevel     *int     `json:"min_security_level"`
-	RequireEmailVerified *bool    `json:"require_email_verified"`
-	IsActive             *bool    `json:"is_active"`
+	ClientName              *string  `json:"client_name"`
+	Description             *string  `json:"description"`
+	LogoURL                 *string  `json:"logo_url"`
+	HomepageURL             *string  `json:"homepage_url"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	PostLogoutRedirectURIs  []string `json:"post_logout_redirect_uris"`
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	Scopes                  []string `json:"scopes"`
+	TokenEndpointAuthMethod *string  `json:"token_endpoint_auth_method"`
+	MinSecurityLevel        *int     `json:"min_security_level"`
+	RequireEmailVerified    *bool    `json:"require_email_verified"`
+	ProtocolType            *string  `json:"protocol_type"`
+	IsConfidential          *bool    `json:"is_confidential"`
+	IsActive                *bool    `json:"is_active"`
 }
 
 func (h *AdminHandler) UpdateClient(w http.ResponseWriter, r *http.Request) {
@@ -375,17 +458,37 @@ func (h *AdminHandler) UpdateClient(w http.ResponseWriter, r *http.Request) {
 	if req.RedirectURIs != nil {
 		client.RedirectURIs = req.RedirectURIs
 	}
+	if req.PostLogoutRedirectURIs != nil {
+		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	}
 	if req.GrantTypes != nil {
 		client.GrantTypes = req.GrantTypes
 	}
+	if req.ResponseTypes != nil {
+		client.ResponseTypes = req.ResponseTypes
+	}
 	if req.Scopes != nil {
 		client.Scopes = req.Scopes
+	}
+	if req.TokenEndpointAuthMethod != nil {
+		client.TokenEndpointAuthMethod = *req.TokenEndpointAuthMethod
 	}
 	if req.MinSecurityLevel != nil {
 		client.MinSecurityLevel = *req.MinSecurityLevel
 	}
 	if req.RequireEmailVerified != nil {
 		client.RequireEmailVerified = *req.RequireEmailVerified
+	}
+	if req.ProtocolType != nil {
+		client.ProtocolType = *req.ProtocolType
+	}
+	if req.IsConfidential != nil {
+		client.IsConfidential = *req.IsConfidential
+		if !client.IsConfidential {
+			client.TokenEndpointAuthMethod = "none"
+		} else if client.TokenEndpointAuthMethod == "" || client.TokenEndpointAuthMethod == "none" {
+			client.TokenEndpointAuthMethod = "client_secret_basic"
+		}
 	}
 	if req.IsActive != nil {
 		client.IsActive = *req.IsActive
@@ -1054,11 +1157,18 @@ func (h *AdminHandler) GetUserDetail(w http.ResponseWriter, r *http.Request) {
 			bindOut := make([]map[string]any, 0, len(bindings))
 			for _, b := range bindings {
 				bindOut = append(bindOut, map[string]any{
-					"id":            b.ID,
-					"provider":      b.Provider,
-					"provider_uid":  b.ProviderUID,
-					"provider_name": b.ProviderName,
-					"bound_at":      b.BoundAt,
+					"id":                 b.ID,
+					"provider":           b.Provider,
+					"provider_uid":       b.ProviderUID,
+					"provider_email":     b.ProviderEmail,
+					"provider_name":      b.ProviderName,
+					"provider_avatar":    b.ProviderAvatar,
+					"status":             b.Status,
+					"bound_at":           b.BoundAt,
+					"unbound_at":         b.UnboundAt,
+					"last_auth_status":   b.LastAuthStatus,
+					"last_auth_check_at": b.LastAuthCheckAt,
+					"last_auth_error":    b.LastAuthError,
 				})
 			}
 			payload["bindings"] = bindOut
@@ -1071,6 +1181,15 @@ func (h *AdminHandler) GetUserDetail(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			payload["risk_reports"] = reports
 		}
+	}
+
+	logs, _, err := h.adminSvc.ListAuditLogs(r.Context(), port.ListAuditOptions{UserID: &id, Limit: 50})
+	if err == nil {
+		out := make([]map[string]any, 0, len(logs))
+		for _, log := range logs {
+			out = append(out, h.auditPayload(r.Context(), log))
+		}
+		payload["audit_logs"] = out
 	}
 
 	JSON(w, http.StatusOK, payload)
@@ -1150,8 +1269,10 @@ func (h *AdminHandler) clientPayload(ctx context.Context, c *domain.OIDCClient) 
 		"client_name":                c.ClientName,
 		"description":                c.Description,
 		"logo_url":                   c.LogoURL,
+		"homepage_url":               c.HomepageURL,
 		"owner_user_id":              c.OwnerUserID,
 		"redirect_uris":              c.RedirectURIs,
+		"post_logout_redirect_uris":  c.PostLogoutRedirectURIs,
 		"grant_types":                c.GrantTypes,
 		"response_types":             c.ResponseTypes,
 		"scopes":                     c.Scopes,

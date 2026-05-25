@@ -46,9 +46,13 @@ func NewAdminService(
 }
 
 type AdminUserUpdate struct {
-	DisplayName *string
-	Status      *domain.UserStatus
-	Role        *string
+	Email         *string
+	EmailVerified *bool
+	DisplayName   *string
+	Alias         *string
+	AvatarURL     *string
+	Status        *domain.UserStatus
+	Role          *string
 }
 
 func (s *AdminService) ListUsers(ctx context.Context, opts port.ListUsersOptions) ([]*domain.User, int64, error) {
@@ -136,8 +140,47 @@ func (s *AdminService) UpdateUser(ctx context.Context, id uuid.UUID, updates Adm
 		}
 		return fmt.Errorf("lookup user: %w", err)
 	}
+	if updates.Email != nil {
+		email := strings.ToLower(strings.TrimSpace(*updates.Email))
+		if _, err := mail.ParseAddress(email); err != nil {
+			return ErrInvalidEmail
+		}
+		if email != user.Email {
+			existing, err := s.userRepo.GetByEmail(ctx, email)
+			if err != nil && !errors.Is(err, port.ErrNotFound) {
+				return fmt.Errorf("lookup email: %w", err)
+			}
+			if existing != nil && existing.ID != user.ID {
+				return ErrAlreadyExists
+			}
+		}
+		user.Email = email
+	}
+	if updates.EmailVerified != nil {
+		user.EmailVerified = *updates.EmailVerified
+	}
 	if updates.DisplayName != nil {
 		user.DisplayName = *updates.DisplayName
+	}
+	if updates.Alias != nil {
+		alias := strings.TrimSpace(*updates.Alias)
+		if alias == "" {
+			user.Alias = nil
+		} else {
+			if user.Alias == nil || *user.Alias != alias {
+				existing, err := s.userRepo.GetByAlias(ctx, alias)
+				if err != nil && !errors.Is(err, port.ErrNotFound) {
+					return fmt.Errorf("lookup alias: %w", err)
+				}
+				if existing != nil && existing.ID != user.ID {
+					return ErrAlreadyExists
+				}
+			}
+			user.Alias = &alias
+		}
+	}
+	if updates.AvatarURL != nil {
+		user.AvatarURL = strings.TrimSpace(*updates.AvatarURL)
 	}
 	if updates.Status != nil {
 		user.Status = *updates.Status

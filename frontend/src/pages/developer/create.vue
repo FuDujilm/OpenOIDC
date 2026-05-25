@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import { Loader2, Copy, Check, X, ArrowLeft } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
 const router = useRouter()
+const auth = useAuthStore()
 
 const form = ref({
   client_name: '',
@@ -24,6 +26,12 @@ const allGrantTypes = ['authorization_code', 'refresh_token', 'client_credential
 
 const saving = ref(false)
 const error = ref('')
+
+async function refreshDeveloperStatus() {
+  await auth.fetchDeveloperStatus()
+}
+
+refreshDeveloperStatus()
 
 // Secret modal
 const showSecretModal = ref(false)
@@ -44,6 +52,13 @@ function toggleGrant(grant: string) {
 }
 
 async function submit() {
+  if (!auth.canCreateDeveloperApp) {
+    error.value = t('developer.createLevelRequired', {
+      current: auth.developerStatus?.current_trust_level ?? auth.user?.security_level ?? 0,
+      min: auth.developerStatus?.min_trust_level ?? auth.developerMinTrustLevel,
+    })
+    return
+  }
   saving.value = true
   error.value = ''
   try {
@@ -58,6 +73,7 @@ async function submit() {
       min_security_level: form.value.min_security_level,
     }
     const res = await api.post<{ id: string; client_secret: string }>('/developer/apps', payload)
+    await auth.fetchDeveloperStatus()
     if (res.data) {
       createdAppId.value = res.data.id
       if (res.data.client_secret) {
@@ -99,6 +115,12 @@ function closeSecretModal() {
     </div>
 
     <!-- Error -->
+    <div v-if="!auth.canCreateDeveloperApp" class="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+      {{ $t('developer.createLevelRequired', {
+        current: auth.developerStatus?.current_trust_level ?? auth.user?.security_level ?? 0,
+        min: auth.developerStatus?.min_trust_level ?? auth.developerMinTrustLevel,
+      }) }}
+    </div>
     <div v-if="error" class="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
       {{ error }}
     </div>
@@ -150,7 +172,7 @@ function closeSecretModal() {
         <input
           v-model="form.homepage_url"
           type="url"
-          placeholder="https://example.com"
+          :placeholder="$t('developer.homepageUrlPlaceholder')"
           class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
         />
         <p class="text-xs text-muted-foreground mt-1">{{ $t('developer.homepageUrlHint') }}</p>
@@ -228,7 +250,7 @@ function closeSecretModal() {
         </router-link>
         <button
           type="submit"
-          :disabled="saving"
+          :disabled="saving || !auth.canCreateDeveloperApp"
           class="bg-foreground text-white px-5 py-2 rounded-full text-sm font-medium hover:bg-foreground/90 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           <Loader2 v-if="saving" class="w-4 h-4 animate-spin" />

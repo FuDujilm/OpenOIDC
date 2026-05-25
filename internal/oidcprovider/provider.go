@@ -14,15 +14,15 @@ import (
 // PKCE, token revocation and introspection enabled.
 func NewOAuth2Provider(store fosite.Storage, secret []byte, privateKey *rsa.PrivateKey, issuer string) fosite.OAuth2Provider {
 	config := &fosite.Config{
-		AccessTokenLifespan:        time.Hour,
-		AuthorizeCodeLifespan:      10 * time.Minute,
-		IDTokenLifespan:            time.Hour,
-		RefreshTokenLifespan:       720 * time.Hour,
-		IDTokenIssuer:              issuer,
-		GlobalSecret:               secret,
-		SendDebugMessagesToClients: false,
-		ScopeStrategy:              fosite.HierarchicScopeStrategy,
-		AudienceMatchingStrategy:   fosite.DefaultAudienceMatchingStrategy,
+		AccessTokenLifespan:         time.Hour,
+		AuthorizeCodeLifespan:       10 * time.Minute,
+		IDTokenLifespan:             time.Hour,
+		RefreshTokenLifespan:        720 * time.Hour,
+		IDTokenIssuer:               issuer,
+		GlobalSecret:                secret,
+		ClientSecretsHasher:         PlainSecretHasher{},
+		ScopeStrategy:               fosite.HierarchicScopeStrategy,
+		AudienceMatchingStrategy:    fosite.DefaultAudienceMatchingStrategy,
 		EnforcePKCEForPublicClients: true,
 	}
 

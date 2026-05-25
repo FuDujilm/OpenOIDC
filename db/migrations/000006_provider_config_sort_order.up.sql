@@ -1,0 +1,2 @@
+ALTER TABLE provider_configs ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE provider_configs ALTER COLUMN provider TYPE VARCHAR(60);

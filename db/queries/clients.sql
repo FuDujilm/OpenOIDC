@@ -1,7 +1,7 @@
 -- name: CreateClient :one
 INSERT INTO oidc_clients (
     client_id,
-    client_secret_hash,
+    client_secret_encrypted,
     name,
     description,
     logo_url,
@@ -15,15 +15,17 @@ INSERT INTO oidc_clients (
     token_endpoint_auth_method,
     protocol_type,
     min_security_level,
+    require_email_verified,
     require_pkce,
     require_consent,
     is_public,
+    is_confidential,
     is_first_party,
     is_active,
     owner_id,
     metadata
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
 )
 RETURNING *;
 
@@ -68,12 +70,14 @@ SET name = $2,
     token_endpoint_auth_method = $12,
     protocol_type = $13,
     min_security_level = $14,
-    require_pkce = $15,
-    require_consent = $16,
-    is_public = $17,
-    is_first_party = $18,
-    is_active = $19,
-    metadata = $20,
+    require_email_verified = $15,
+    require_pkce = $16,
+    require_consent = $17,
+    is_public = $18,
+    is_confidential = $19,
+    is_first_party = $20,
+    is_active = $21,
+    metadata = $22,
     updated_at = NOW()
 WHERE id = $1;
 
@@ -83,6 +87,6 @@ WHERE id = $1;
 
 -- name: UpdateClientSecret :exec
 UPDATE oidc_clients
-SET client_secret_hash = $2,
+SET client_secret_encrypted = $2,
     updated_at = NOW()
 WHERE id = $1;

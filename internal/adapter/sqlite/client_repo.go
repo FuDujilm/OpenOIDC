@@ -21,8 +21,8 @@ func NewClientRepo(db *sql.DB) *ClientRepo {
 	return &ClientRepo{db: db}
 }
 
-const clientColumns = `id, client_id, client_secret_hash, client_secret_plain, client_name, description, logo_url, homepage_url, owner_user_id,
-	redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
+const clientColumns = `id, client_id, client_secret_encrypted, client_name, description, logo_url, homepage_url, owner_user_id,
+	redirect_uris, post_logout_redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
 	min_security_level, require_email_verified, protocol_type, is_active, is_confidential,
 	created_at, updated_at`
 
@@ -30,11 +30,11 @@ func scanClient(row interface{ Scan(dest ...any) error }) (*domain.OIDCClient, e
 	var c domain.OIDCClient
 	var id string
 	var ownerUserID sql.NullString
-	var redirectURIs, grantTypes, responseTypes, scopes string
+	var redirectURIs, postLogoutRedirectURIs, grantTypes, responseTypes, scopes string
 
 	err := row.Scan(
-		&id, &c.ClientID, &c.ClientSecretHash, &c.ClientSecretPlain, &c.ClientName, &c.Description, &c.LogoURL, &c.HomepageURL, &ownerUserID,
-		&redirectURIs, &grantTypes, &responseTypes, &scopes, &c.TokenEndpointAuthMethod,
+		&id, &c.ClientID, &c.ClientSecretEncrypted, &c.ClientName, &c.Description, &c.LogoURL, &c.HomepageURL, &ownerUserID,
+		&redirectURIs, &postLogoutRedirectURIs, &grantTypes, &responseTypes, &scopes, &c.TokenEndpointAuthMethod,
 		&c.MinSecurityLevel, &c.RequireEmailVerified, &c.ProtocolType, &c.IsActive, &c.IsConfidential,
 		&c.CreatedAt, &c.UpdatedAt,
 	)
@@ -50,12 +50,16 @@ func scanClient(row interface{ Scan(dest ...any) error }) (*domain.OIDCClient, e
 
 	// Unmarshal JSON arrays
 	_ = json.Unmarshal([]byte(redirectURIs), &c.RedirectURIs)
+	_ = json.Unmarshal([]byte(postLogoutRedirectURIs), &c.PostLogoutRedirectURIs)
 	_ = json.Unmarshal([]byte(grantTypes), &c.GrantTypes)
 	_ = json.Unmarshal([]byte(responseTypes), &c.ResponseTypes)
 	_ = json.Unmarshal([]byte(scopes), &c.Scopes)
 
 	if c.RedirectURIs == nil {
 		c.RedirectURIs = []string{}
+	}
+	if c.PostLogoutRedirectURIs == nil {
+		c.PostLogoutRedirectURIs = []string{}
 	}
 	if c.GrantTypes == nil {
 		c.GrantTypes = []string{}
@@ -97,16 +101,16 @@ func (r *ClientRepo) Create(ctx context.Context, c *domain.OIDCClient) error {
 
 	query := `
 		INSERT INTO oidc_clients (
-			id, client_id, client_secret_hash, client_secret_plain, client_name, description, logo_url, homepage_url, owner_user_id,
-			redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
+			id, client_id, client_secret_encrypted, client_name, description, logo_url, homepage_url, owner_user_id,
+			redirect_uris, post_logout_redirect_uris, grant_types, response_types, scopes, token_endpoint_auth_method,
 			min_security_level, require_email_verified, protocol_type, is_active, is_confidential,
 			created_at, updated_at
 		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
-		c.ID.String(), c.ClientID, c.ClientSecretHash, c.ClientSecretPlain, c.ClientName, c.Description, c.LogoURL, c.HomepageURL,
+		c.ID.String(), c.ClientID, c.ClientSecretEncrypted, c.ClientName, c.Description, c.LogoURL, c.HomepageURL,
 		ownerUserIDToNullString(c.OwnerUserID),
-		marshalStringSlice(c.RedirectURIs), marshalStringSlice(c.GrantTypes),
+		marshalStringSlice(c.RedirectURIs), marshalStringSlice(c.PostLogoutRedirectURIs), marshalStringSlice(c.GrantTypes),
 		marshalStringSlice(c.ResponseTypes), marshalStringSlice(c.Scopes),
 		c.TokenEndpointAuthMethod, c.MinSecurityLevel, c.RequireEmailVerified,
 		c.ProtocolType, c.IsActive, c.IsConfidential,
@@ -211,14 +215,14 @@ func (r *ClientRepo) Update(ctx context.Context, c *domain.OIDCClient) error {
 	query := `
 		UPDATE oidc_clients SET
 			client_name = ?, description = ?, logo_url = ?, homepage_url = ?,
-			redirect_uris = ?, grant_types = ?, response_types = ?, scopes = ?,
+			redirect_uris = ?, post_logout_redirect_uris = ?, grant_types = ?, response_types = ?, scopes = ?,
 			token_endpoint_auth_method = ?, min_security_level = ?, require_email_verified = ?,
 			protocol_type = ?, is_active = ?, is_confidential = ?, updated_at = ?
 		WHERE id = ?
 	`
 	res, err := r.db.ExecContext(ctx, query,
 		c.ClientName, c.Description, c.LogoURL, c.HomepageURL,
-		marshalStringSlice(c.RedirectURIs), marshalStringSlice(c.GrantTypes),
+		marshalStringSlice(c.RedirectURIs), marshalStringSlice(c.PostLogoutRedirectURIs), marshalStringSlice(c.GrantTypes),
 		marshalStringSlice(c.ResponseTypes), marshalStringSlice(c.Scopes),
 		c.TokenEndpointAuthMethod, c.MinSecurityLevel, c.RequireEmailVerified,
 		c.ProtocolType, c.IsActive, c.IsConfidential, c.UpdatedAt,
@@ -242,11 +246,11 @@ func (r *ClientRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-func (r *ClientRepo) UpdateSecret(ctx context.Context, id uuid.UUID, hash, plain string) error {
+func (r *ClientRepo) UpdateSecret(ctx context.Context, id uuid.UUID, encrypted string) error {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE oidc_clients SET client_secret_hash = ?, client_secret_plain = ?, updated_at = ? WHERE id = ?`,
-		hash, plain, now, id.String(),
+		`UPDATE oidc_clients SET client_secret_encrypted = ?, updated_at = ? WHERE id = ?`,
+		encrypted, now, id.String(),
 	)
 	return err
 }

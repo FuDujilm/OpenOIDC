@@ -36,9 +36,18 @@ type TokenValidatingProvider interface {
 	ValidateToken(ctx context.Context, accessToken string) (*ProviderUserInfo, error)
 }
 
+type EnabledSocialProvider struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Type        string `json:"type,omitempty"`
+	IconURL     string `json:"icon_url,omitempty"`
+	SortOrder   int    `json:"-"`
+}
+
 type SocialProviderRegistry interface {
 	Get(name string) (SocialProvider, error)
 	List() []string
+	ListPublic() []EnabledSocialProvider
 	IsEnabled(name string) bool
 	Register(p SocialProvider)
 	Reload(ctx context.Context) error

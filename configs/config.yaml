@@ -63,6 +63,9 @@ security:
   lockout_duration: 15m
   bcrypt_cost: 12
 
+secrets:
+  client_secret_encryption_key: dev-client-secret-encryption-key
+
 oauth2:
   google:
     enabled: false

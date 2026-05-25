@@ -57,6 +57,11 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 		fositeStore     fosite.Storage
 	)
 
+	secretCipher, err := service.NewSecretCipher(cfg.Secrets.ClientSecretEncryptionKey)
+	if err != nil {
+		return router.Deps{}, cleanup, fmt.Errorf("client secret cipher: %w", err)
+	}
+
 	// Variables for health handler (nil when using sqlite).
 	var pgPool *pgxpool.Pool
 	var redisClient *goredis.Client
@@ -87,7 +92,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 		riskReportRepo = sqliteAdapter.NewRiskReportRepo(sqliteDB)
 		riskListRepo = sqliteAdapter.NewRiskListRepo(sqliteDB)
 		consentRepo = sqliteAdapter.NewConsentRepo(sqliteDB)
-		fositeStore = sqliteAdapter.NewFositeStore(sqliteDB)
+		fositeStore = sqliteAdapter.NewFositeStore(sqliteDB, secretCipher)
 
 		mc := memcache.NewMemCache()
 		cleanup = chainCleanup(cleanup, func() { _ = mc.Close() })
@@ -131,7 +136,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 		riskReportRepo = postgres.NewRiskReportRepo(db)
 		riskListRepo = postgres.NewRiskListRepo(db)
 		consentRepo = postgres.NewConsentRepo(db)
-		fositeStore = postgres.NewFositeStore(db)
+		fositeStore = postgres.NewFositeStore(db, secretCipher)
 	}
 	// settingsRepo is used by devHandler above.
 
@@ -150,7 +155,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 	authSvc := service.NewAuthService(userRepo, sessionRepo, cache, auditRepo, emailSender, settingsRepo, cfg)
 	sessionSvc := service.NewSessionService(sessionRepo, cfg)
 	socialSvc := service.NewSocialService(bindingRepo, userRepo, socialRegistry, cache, securitySvc, sessionRepo, auditRepo, settingsRepo, riskListRepo, cfg)
-	clientSvc := service.NewClientService(clientRepo, accessRuleRepo, auditRepo)
+	clientSvc := service.NewClientService(clientRepo, accessRuleRepo, auditRepo, secretCipher)
 	adminSvc := service.NewAdminService(userRepo, providerCfgRepo, settingsRepo, aliasRepo, signingKeyRepo, auditRepo)
 	accessCtrl := service.NewAccessControlService(accessRuleRepo, aliasRepo)
 	riskSvc := service.NewRiskService(riskReportRepo, riskListRepo, bindingRepo, userRepo, auditRepo, securitySvc)
@@ -180,7 +185,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 	oidcHandler := handler.NewOIDCHandler(provider, userRepo, clientSvc, accessCtrl, sessionSvc, cfg.Server, loginURL)
 	oidcHandler.SetCache(cache)
 	wellKnownHandler := handler.NewWellKnownHandler(cfg.Server.BaseURL, signingKeyRepo)
-	devHandler := handler.NewDeveloperHandler(clientSvc, riskSvc, settingsRepo, consentRepo)
+	devHandler := handler.NewDeveloperHandler(clientSvc, riskSvc, userRepo, settingsRepo, consentRepo)
 	healthHandler := handler.NewHealthHandler(pgPool, redisClient)
 
 	allowedOrigins := []string{"*"}

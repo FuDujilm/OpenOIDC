@@ -261,7 +261,7 @@ const integrationItems = computed(() => {
             <input
               v-model="form.homepage_url"
               type="url"
-              placeholder="https://example.com"
+              :placeholder="$t('developer.homepageUrlPlaceholder')"
               class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
             />
             <p class="text-xs text-muted-foreground mt-1">{{ $t('developer.homepageUrlHint') }}</p>
@@ -371,8 +371,8 @@ const integrationItems = computed(() => {
 
             <!-- Client Secret row -->
             <div v-if="item.isSecret" class="flex items-center gap-2">
-              <code class="flex-1 text-sm font-mono break-all">{{ secretVisible && revealedSecret ? revealedSecret : '••••••••••' }}</code>
-              <button @click="secretVisible = !secretVisible" class="shrink-0 p-1.5 rounded-lg hover:bg-muted transition-colors">
+              <code class="flex-1 text-sm font-mono break-all">{{ revealedSecret ? (secretVisible ? revealedSecret : '••••••••••') : $t('developer.secretUnavailable') }}</code>
+              <button @click="secretVisible = !secretVisible" :disabled="!revealedSecret" class="shrink-0 p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 <EyeOff v-if="secretVisible && revealedSecret" class="w-4 h-4 text-muted-foreground" />
                 <Eye v-else class="w-4 h-4 text-muted-foreground" />
               </button>

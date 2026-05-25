@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS risk_list (
 CREATE INDEX IF NOT EXISTS idx_risk_list_provider ON risk_list(provider, provider_uid);
 CREATE INDEX IF NOT EXISTS idx_risk_list_user_id ON risk_list(user_id) WHERE user_id IS NOT NULL;
 
--- Add missing columns to oidc_clients
-ALTER TABLE oidc_clients ADD COLUMN IF NOT EXISTS client_secret_plain TEXT NOT NULL DEFAULT '';
+-- Client secrets are stored in oidc_clients.client_secret_encrypted from the initial schema.
+
 ALTER TABLE oidc_clients ADD COLUMN IF NOT EXISTS require_email_verified BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE oidc_clients ADD COLUMN IF NOT EXISTS is_confidential BOOLEAN NOT NULL DEFAULT TRUE;
 

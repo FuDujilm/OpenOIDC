@@ -18,34 +18,39 @@ type ClientService struct {
 	clientRepo     port.ClientRepository
 	accessRuleRepo port.ClientAccessRuleRepository
 	auditRepo      port.AuditRepository
+	secretCipher   *SecretCipher
 }
 
 func NewClientService(
 	clientRepo port.ClientRepository,
 	accessRuleRepo port.ClientAccessRuleRepository,
 	auditRepo port.AuditRepository,
+	secretCipher *SecretCipher,
 ) *ClientService {
 	return &ClientService{
 		clientRepo:     clientRepo,
 		accessRuleRepo: accessRuleRepo,
 		auditRepo:      auditRepo,
+		secretCipher:   secretCipher,
 	}
 }
 
 type CreateClientInput struct {
-	ClientName           string
-	Description          string
-	LogoURL              string
-	HomepageURL          string
-	OwnerUserID          *uuid.UUID
-	RedirectURIs         []string
-	GrantTypes           []string
-	ResponseTypes        []string
-	Scopes               []string
-	MinSecurityLevel     int
-	RequireEmailVerified *bool
-	ProtocolType         string
-	IsConfidential       bool
+	ClientName              string
+	Description             string
+	LogoURL                 string
+	HomepageURL             string
+	OwnerUserID             *uuid.UUID
+	RedirectURIs            []string
+	PostLogoutRedirectURIs  []string
+	GrantTypes              []string
+	ResponseTypes           []string
+	Scopes                  []string
+	TokenEndpointAuthMethod string
+	MinSecurityLevel        int
+	RequireEmailVerified    *bool
+	ProtocolType            string
+	IsConfidential          bool
 }
 
 func (s *ClientService) CreateClient(ctx context.Context, input CreateClientInput) (*domain.OIDCClient, string, error) {
@@ -64,7 +69,7 @@ func (s *ClientService) CreateClient(ctx context.Context, input CreateClientInpu
 	if len(input.Scopes) == 0 {
 		input.Scopes = []string{"openid", "profile", "email"}
 	}
-	if err := validateClientConfig(input.RedirectURIs, input.GrantTypes, input.ResponseTypes, input.Scopes, input.HomepageURL, input.MinSecurityLevel, input.IsConfidential); err != nil {
+	if err := validateClientConfig(input.RedirectURIs, input.PostLogoutRedirectURIs, input.GrantTypes, input.ResponseTypes, input.Scopes, input.HomepageURL, input.MinSecurityLevel, input.IsConfidential); err != nil {
 		return nil, "", err
 	}
 
@@ -76,14 +81,19 @@ func (s *ClientService) CreateClient(ctx context.Context, input CreateClientInpu
 	if err != nil {
 		return nil, "", err
 	}
-	secretHash, err := hashPassword(plainSecret)
+	secretEncrypted, err := s.secretCipher.Encrypt(plainSecret)
 	if err != nil {
-		return nil, "", fmt.Errorf("hash secret: %w", err)
+		return nil, "", fmt.Errorf("encrypt secret: %w", err)
 	}
 
-	tokenAuth := "client_secret_basic"
+	tokenAuth := strings.TrimSpace(input.TokenEndpointAuthMethod)
 	if !input.IsConfidential {
 		tokenAuth = "none"
+	} else if tokenAuth == "" || tokenAuth == "none" {
+		tokenAuth = "client_secret_basic"
+	}
+	if err := validateTokenEndpointAuthMethod(tokenAuth, input.IsConfidential); err != nil {
+		return nil, "", err
 	}
 
 	requireEmailVerified := true
@@ -95,7 +105,7 @@ func (s *ClientService) CreateClient(ctx context.Context, input CreateClientInpu
 	client := &domain.OIDCClient{
 		ID:                      uuid.New(),
 		ClientID:                clientID,
-		ClientSecretHash:        secretHash,
+		ClientSecretEncrypted:   secretEncrypted,
 		ClientSecretPlain:       plainSecret,
 		ClientName:              input.ClientName,
 		Description:             input.Description,
@@ -103,6 +113,7 @@ func (s *ClientService) CreateClient(ctx context.Context, input CreateClientInpu
 		HomepageURL:             strings.TrimSpace(input.HomepageURL),
 		OwnerUserID:             input.OwnerUserID,
 		RedirectURIs:            input.RedirectURIs,
+		PostLogoutRedirectURIs:  input.PostLogoutRedirectURIs,
 		GrantTypes:              input.GrantTypes,
 		ResponseTypes:           input.ResponseTypes,
 		Scopes:                  input.Scopes,
@@ -142,6 +153,9 @@ func (s *ClientService) GetClient(ctx context.Context, id uuid.UUID) (*domain.OI
 		}
 		return nil, err
 	}
+	if err := s.revealClientSecret(c); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -151,6 +165,9 @@ func (s *ClientService) GetClientByClientID(ctx context.Context, clientID string
 		if errors.Is(err, port.ErrNotFound) {
 			return nil, ErrNotFound
 		}
+		return nil, err
+	}
+	if err := s.revealClientSecret(c); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -174,7 +191,10 @@ func (s *ClientService) UpdateClient(ctx context.Context, c *domain.OIDCClient) 
 	if c.ClientName == "" {
 		return fmt.Errorf("%w: client_name required", ErrInvalidInput)
 	}
-	if err := validateClientConfig(c.RedirectURIs, c.GrantTypes, c.ResponseTypes, c.Scopes, c.HomepageURL, c.MinSecurityLevel, c.IsConfidential); err != nil {
+	if err := validateClientConfig(c.RedirectURIs, c.PostLogoutRedirectURIs, c.GrantTypes, c.ResponseTypes, c.Scopes, c.HomepageURL, c.MinSecurityLevel, c.IsConfidential); err != nil {
+		return err
+	}
+	if err := validateTokenEndpointAuthMethod(c.TokenEndpointAuthMethod, c.IsConfidential); err != nil {
 		return err
 	}
 	c.UpdatedAt = time.Now().UTC()
@@ -215,11 +235,11 @@ func (s *ClientService) RotateSecret(ctx context.Context, id uuid.UUID) (string,
 	if err != nil {
 		return "", err
 	}
-	hash, err := hashPassword(plain)
+	encrypted, err := s.secretCipher.Encrypt(plain)
 	if err != nil {
-		return "", fmt.Errorf("hash secret: %w", err)
+		return "", fmt.Errorf("encrypt secret: %w", err)
 	}
-	if err := s.clientRepo.UpdateSecret(ctx, id, hash, plain); err != nil {
+	if err := s.clientRepo.UpdateSecret(ctx, id, encrypted); err != nil {
 		return "", fmt.Errorf("update secret: %w", err)
 	}
 	rt := "oidc_client"
@@ -242,14 +262,24 @@ func (s *ClientService) VerifySecret(ctx context.Context, clientID, secret strin
 		}
 		return nil, err
 	}
-	ok, err := verifyPassword(c.ClientSecretHash, secret)
+	plain, err := s.secretCipher.Decrypt(c.ClientSecretEncrypted)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if plain != secret {
 		return nil, ErrInvalidCredentials
 	}
+	c.ClientSecretPlain = plain
 	return c, nil
+}
+
+func (s *ClientService) revealClientSecret(c *domain.OIDCClient) error {
+	plain, err := s.secretCipher.Decrypt(c.ClientSecretEncrypted)
+	if err != nil {
+		return err
+	}
+	c.ClientSecretPlain = plain
+	return nil
 }
 
 func (s *ClientService) AddAccessRule(ctx context.Context, clientID uuid.UUID, ruleType, value string) (*domain.ClientAccessRule, error) {
@@ -280,14 +310,18 @@ func (s *ClientService) RemoveAccessRule(ctx context.Context, ruleID uuid.UUID) 
 	return s.accessRuleRepo.Delete(ctx, ruleID)
 }
 
-func validateClientConfig(redirectURIs, grantTypes, responseTypes, scopes []string, homepageURL string, minSecurityLevel int, isConfidential bool) error {
-	if err := validateRedirectURIs(redirectURIs); err != nil {
+func validateClientConfig(redirectURIs, postLogoutRedirectURIs, grantTypes, responseTypes, scopes []string, homepageURL string, minSecurityLevel int, isConfidential bool) error {
+	requiresRedirectURI := containsString(grantTypes, "authorization_code")
+	if err := validateRedirectURIs(redirectURIs, requiresRedirectURI); err != nil {
+		return err
+	}
+	if err := validatePostLogoutRedirectURIs(postLogoutRedirectURIs); err != nil {
 		return err
 	}
 	if err := validateGrantTypes(grantTypes); err != nil {
 		return err
 	}
-	if err := validateResponseTypes(responseTypes); err != nil {
+	if err := validateResponseTypes(responseTypes, requiresRedirectURI); err != nil {
 		return err
 	}
 	if err := validateScopes(scopes); err != nil {
@@ -305,9 +339,28 @@ func validateClientConfig(redirectURIs, grantTypes, responseTypes, scopes []stri
 	return nil
 }
 
-func validateRedirectURIs(redirectURIs []string) error {
+func validateTokenEndpointAuthMethod(method string, isConfidential bool) error {
+	method = strings.TrimSpace(method)
+	if !isConfidential {
+		if method == "none" {
+			return nil
+		}
+		return fmt.Errorf("%w: public clients must use token_endpoint_auth_method none", ErrInvalidInput)
+	}
+	switch method {
+	case "client_secret_basic", "client_secret_post":
+		return nil
+	default:
+		return fmt.Errorf("%w: unsupported token_endpoint_auth_method", ErrInvalidInput)
+	}
+}
+
+func validateRedirectURIs(redirectURIs []string, required bool) error {
 	if len(redirectURIs) == 0 {
-		return fmt.Errorf("%w: at least one redirect_uri required", ErrInvalidInput)
+		if required {
+			return fmt.Errorf("%w: at least one redirect_uri required", ErrInvalidInput)
+		}
+		return nil
 	}
 	seen := make(map[string]struct{}, len(redirectURIs))
 	for _, raw := range redirectURIs {
@@ -332,6 +385,38 @@ func validateRedirectURIs(redirectURIs []string) error {
 		case "https":
 		default:
 			return fmt.Errorf("%w: redirect_uri must use https", ErrInvalidInput)
+		}
+	}
+	return nil
+}
+
+func validatePostLogoutRedirectURIs(uris []string) error {
+	if len(uris) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(uris))
+	for _, raw := range uris {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return fmt.Errorf("%w: post_logout_redirect_uri cannot be empty", ErrInvalidInput)
+		}
+		if _, exists := seen[value]; exists {
+			return fmt.Errorf("%w: duplicate post_logout_redirect_uri", ErrInvalidInput)
+		}
+		seen[value] = struct{}{}
+
+		u, err := url.Parse(value)
+		if err != nil || u.Scheme == "" || u.Host == "" || u.Fragment != "" {
+			return fmt.Errorf("%w: invalid post_logout_redirect_uri", ErrInvalidInput)
+		}
+		switch u.Scheme {
+		case "http":
+			if u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
+				return fmt.Errorf("%w: http post_logout_redirect_uri only allowed for localhost", ErrInvalidInput)
+			}
+		case "https":
+		default:
+			return fmt.Errorf("%w: post_logout_redirect_uri must use https", ErrInvalidInput)
 		}
 	}
 	return nil
@@ -374,9 +459,12 @@ func validateGrantTypes(grantTypes []string) error {
 	return nil
 }
 
-func validateResponseTypes(responseTypes []string) error {
+func validateResponseTypes(responseTypes []string, required bool) error {
 	if len(responseTypes) == 0 {
-		return fmt.Errorf("%w: at least one response_type required", ErrInvalidInput)
+		if required {
+			return fmt.Errorf("%w: at least one response_type required", ErrInvalidInput)
+		}
+		return nil
 	}
 	for _, responseType := range responseTypes {
 		if strings.TrimSpace(responseType) != "code" {

@@ -9,7 +9,7 @@ import (
 type OIDCClient struct {
 	ID                      uuid.UUID  `json:"id"`
 	ClientID                string     `json:"client_id"`
-	ClientSecretHash        string     `json:"-"`
+	ClientSecretEncrypted   string     `json:"-"`
 	ClientSecretPlain       string     `json:"client_secret,omitempty"`
 	ClientName              string     `json:"client_name"`
 	Description             string     `json:"description"`
@@ -17,6 +17,7 @@ type OIDCClient struct {
 	HomepageURL             string     `json:"homepage_url"`
 	OwnerUserID             *uuid.UUID `json:"owner_user_id,omitempty"`
 	RedirectURIs            []string   `json:"redirect_uris"`
+	PostLogoutRedirectURIs  []string   `json:"post_logout_redirect_uris"`
 	GrantTypes              []string   `json:"grant_types"`
 	ResponseTypes           []string   `json:"response_types"`
 	Scopes                  []string   `json:"scopes"`

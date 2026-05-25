@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/anthropic/oidc-platform/internal/config"
-	"github.com/anthropic/oidc-platform/internal/domain"
 	mw "github.com/anthropic/oidc-platform/internal/handler/middleware"
 	"github.com/anthropic/oidc-platform/internal/port"
 	"github.com/anthropic/oidc-platform/internal/service"
@@ -29,32 +28,20 @@ func NewSocialHandler(socialSvc *service.SocialService, socialRegistry port.Soci
 // ListEnabled handles GET /api/v1/social/providers (public, no auth).
 // Returns only enabled providers with their display info.
 func (h *SocialHandler) ListEnabled(w http.ResponseWriter, r *http.Request) {
-	names := h.socialRegistry.List()
-
-	displayNames := map[string]string{
-		domain.ProviderGitHub:    "GitHub",
-		domain.ProviderGoogle:    "Google",
-		domain.ProviderGitLab:    "GitLab",
-		domain.ProviderGitee:     "Gitee",
-		domain.ProviderDiscord:   "Discord",
-		domain.ProviderTelegram:  "Telegram",
-		domain.ProviderMicrosoft: "Microsoft",
-		domain.ProviderApple:     "Apple",
-		domain.ProviderQQ:        "QQ",
-		domain.ProviderWeChat:    "WeChat",
-		domain.ProviderPhone:     "Phone",
-	}
-
-	out := make([]map[string]any, 0, len(names))
-	for _, name := range names {
-		dn := displayNames[name]
-		if dn == "" {
-			dn = name
+	providers := h.socialRegistry.ListPublic()
+	out := make([]map[string]any, 0, len(providers))
+	for _, p := range providers {
+		item := map[string]any{
+			"name":         p.Name,
+			"display_name": p.DisplayName,
 		}
-		out = append(out, map[string]any{
-			"name":         name,
-			"display_name": dn,
-		})
+		if p.Type != "" {
+			item["type"] = p.Type
+		}
+		if p.IconURL != "" {
+			item["icon_url"] = p.IconURL
+		}
+		out = append(out, item)
 	}
 	JSON(w, http.StatusOK, out)
 }

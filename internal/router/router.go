@@ -108,10 +108,11 @@ func NewRouter(d Deps) *chi.Mux {
 			r.Post("/consent/reject", d.OIDCHandler.ConsentReject)
 		})
 
-		// Developer routes (authenticated users with sufficient security level).
+		// Developer routes. Existing app management remains available to owners;
+		// creating new apps is checked by the developer status in the handler.
 		r.Route("/developer", func(r chi.Router) {
 			r.Use(mw.SessionAuth(d.SessionService, d.CookieName))
-			r.Use(mw.DeveloperOnly(d.UserRepo, d.SettingsRepo))
+			r.Get("/status", d.DeveloperHandler.Status)
 			r.Get("/apps", d.DeveloperHandler.ListApps)
 			r.Post("/apps", d.DeveloperHandler.CreateApp)
 			r.Get("/apps/{id}", d.DeveloperHandler.GetApp)
@@ -135,6 +136,8 @@ func NewRouter(d Deps) *chi.Mux {
 			r.Get("/users/{id}/clients", d.AdminHandler.ListUserClients)
 			r.Put("/users/{id}/security-level", d.AdminHandler.OverrideSecurityLevel)
 			r.Post("/users/{id}/reset-password", d.AdminHandler.ResetUserPassword)
+			r.Delete("/users/{id}/sessions/{session_id}", d.AdminHandler.RevokeUserSession)
+			r.Delete("/users/{id}/bindings/{provider}", d.AdminHandler.UnbindUserSocial)
 
 			r.Get("/clients", d.AdminHandler.ListClients)
 			r.Post("/clients", d.AdminHandler.CreateClient)

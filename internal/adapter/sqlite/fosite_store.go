@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/anthropic/oidc-platform/internal/service"
 	"github.com/google/uuid"
 	"github.com/ory/fosite"
 )
@@ -19,12 +20,13 @@ import (
 // It covers: fosite.Storage, oauth2.CoreStorage, openid.OpenIDConnectRequestStorage,
 // pkce.PKCERequestStorage, and fosite.ClientManager.
 type FositeStore struct {
-	db *sql.DB
+	db           *sql.DB
+	secretCipher *service.SecretCipher
 }
 
 // NewFositeStore returns a new FositeStore.
-func NewFositeStore(db *sql.DB) *FositeStore {
-	return &FositeStore{db: db}
+func NewFositeStore(db *sql.DB, secretCipher *service.SecretCipher) *FositeStore {
+	return &FositeStore{db: db, secretCipher: secretCipher}
 }
 
 // ---------------------------------------------------------------------------
@@ -57,13 +59,13 @@ func (c *fositeClient) GetAudience() fosite.Arguments      { return nil }
 // GetClient retrieves an OIDC client by client_id from the oidc_clients table.
 func (s *FositeStore) GetClient(ctx context.Context, id string) (fosite.Client, error) {
 	var (
-		clientID, secret                                     string
-		redirectURIsJSON, grantTypesJSON                     string
-		responseTypesJSON, scopesJSON                        string
-		isConfidential                                       bool
+		clientID, secret                 string
+		redirectURIsJSON, grantTypesJSON string
+		responseTypesJSON, scopesJSON    string
+		isConfidential                   bool
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT client_id, client_secret_hash, redirect_uris, grant_types, response_types,
+		`SELECT client_id, client_secret_encrypted, redirect_uris, grant_types, response_types,
 		 scopes, is_confidential
 		 FROM oidc_clients WHERE client_id = ? AND is_active = 1`,
 		id,
@@ -75,6 +77,10 @@ func (s *FositeStore) GetClient(ctx context.Context, id string) (fosite.Client, 
 		}
 		return nil, err
 	}
+	plainSecret, err := s.secretCipher.Decrypt(secret)
+	if err != nil {
+		return nil, err
+	}
 
 	var redirectURIs, grantTypes, responseTypes, scopes []string
 	_ = json.Unmarshal([]byte(redirectURIsJSON), &redirectURIs)
@@ -84,7 +90,7 @@ func (s *FositeStore) GetClient(ctx context.Context, id string) (fosite.Client, 
 
 	return &fositeClient{
 		id:            clientID,
-		secret:        secret,
+		secret:        plainSecret,
 		redirectURIs:  redirectURIs,
 		grantTypes:    grantTypes,
 		responseTypes: responseTypes,
@@ -188,7 +194,9 @@ func (s *FositeStore) saveSession(ctx context.Context, sessionType, signature st
 
 	var expiresAt *time.Time
 	if sess := req.GetSession(); sess != nil {
-		if e, ok := sess.(interface{ GetExpiresAt(fosite.TokenType) time.Time }); ok {
+		if e, ok := sess.(interface {
+			GetExpiresAt(fosite.TokenType) time.Time
+		}); ok {
 			t := e.GetExpiresAt(fosite.AccessToken)
 			if !t.IsZero() {
 				expiresAt = &t

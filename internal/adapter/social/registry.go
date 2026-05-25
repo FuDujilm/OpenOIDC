@@ -16,12 +16,14 @@ import (
 type Registry struct {
 	mu              sync.RWMutex
 	providers       map[string]port.SocialProvider
+	publicProviders map[string]port.EnabledSocialProvider
 	providerCfgRepo port.ProviderConfigRepository
 }
 
 func NewRegistry(providerCfgRepo port.ProviderConfigRepository) *Registry {
 	return &Registry{
 		providers:       make(map[string]port.SocialProvider),
+		publicProviders: make(map[string]port.EnabledSocialProvider),
 		providerCfgRepo: providerCfgRepo,
 	}
 }
@@ -30,6 +32,13 @@ func (r *Registry) Register(p port.SocialProvider) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.providers[p.Name()] = p
+	if _, ok := r.publicProviders[p.Name()]; !ok {
+		r.publicProviders[p.Name()] = port.EnabledSocialProvider{
+			Name:        p.Name(),
+			DisplayName: providerDisplayName(p.Name()),
+			Type:        domain.ProviderTypeBuiltIn,
+		}
+	}
 }
 
 func (r *Registry) Get(name string) (port.SocialProvider, error) {
@@ -51,6 +60,24 @@ func (r *Registry) List() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func (r *Registry) ListPublic() []port.EnabledSocialProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	providers := make([]port.EnabledSocialProvider, 0, len(r.publicProviders))
+	for _, p := range r.publicProviders {
+		if _, ok := r.providers[p.Name]; ok {
+			providers = append(providers, p)
+		}
+	}
+	sort.Slice(providers, func(i, j int) bool {
+		if providers[i].SortOrder == providers[j].SortOrder {
+			return providers[i].Name < providers[j].Name
+		}
+		return providers[i].SortOrder < providers[j].SortOrder
+	})
+	return providers
 }
 
 func (r *Registry) IsEnabled(name string) bool {
@@ -83,12 +110,15 @@ func (r *Registry) Reload(ctx context.Context) error {
 		}
 		if !found {
 			delete(r.providers, name)
+			delete(r.publicProviders, name)
 		}
 	}
 
 	// Add/update providers from DB configs.
 	for _, cfg := range configs {
 		if !cfg.IsEnabled {
+			delete(r.providers, cfg.Provider)
+			delete(r.publicProviders, cfg.Provider)
 			continue
 		}
 		if cfg.ClientID == nil || *cfg.ClientID == "" {
@@ -101,12 +131,23 @@ func (r *Registry) Reload(ctx context.Context) error {
 		p := buildProvider(cfg.Provider, *cfg.ClientID, secret, cfg.ExtraConfig)
 		if p != nil {
 			r.providers[cfg.Provider] = p
+			r.publicProviders[cfg.Provider] = providerPublicInfo(cfg)
 		}
 	}
 	return nil
 }
 
 func buildProvider(name, clientID, clientSecret string, extra map[string]any) port.SocialProvider {
+	cfg := &domain.ProviderConfig{
+		Provider:     name,
+		ClientID:     &clientID,
+		ClientSecret: &clientSecret,
+		ExtraConfig:  extra,
+	}
+	if domain.IsCustomOAuth2Provider(cfg) {
+		return NewCustomOAuth2Provider(name, clientID, clientSecret, cfg.CustomOAuth2Config())
+	}
+
 	switch name {
 	case domain.ProviderGitHub:
 		return NewGitHubProvider(clientID, clientSecret)
@@ -170,6 +211,55 @@ func buildProvider(name, clientID, clientSecret string, extra map[string]any) po
 	default:
 		slog.Warn("unknown provider in DB config", "provider", name)
 		return nil
+	}
+}
+
+func providerPublicInfo(cfg *domain.ProviderConfig) port.EnabledSocialProvider {
+	name := cfg.Provider
+	displayName := cfg.DisplayName
+	if displayName == "" {
+		displayName = providerDisplayName(name)
+	}
+	info := port.EnabledSocialProvider{
+		Name:        name,
+		DisplayName: displayName,
+		Type:        domain.ProviderType(cfg),
+		SortOrder:   cfg.SortOrder,
+	}
+	if cfg.ExtraConfig != nil {
+		if iconURL, _ := cfg.ExtraConfig["icon_url"].(string); iconURL != "" {
+			info.IconURL = iconURL
+		}
+	}
+	return info
+}
+
+func providerDisplayName(name string) string {
+	switch name {
+	case domain.ProviderGitHub:
+		return "GitHub"
+	case domain.ProviderGoogle:
+		return "Google"
+	case domain.ProviderGitLab:
+		return "GitLab"
+	case domain.ProviderGitee:
+		return "Gitee"
+	case domain.ProviderDiscord:
+		return "Discord"
+	case domain.ProviderTelegram:
+		return "Telegram"
+	case domain.ProviderMicrosoft:
+		return "Microsoft"
+	case domain.ProviderApple:
+		return "Apple"
+	case domain.ProviderQQ:
+		return "QQ"
+	case domain.ProviderWeChat:
+		return "WeChat"
+	case domain.ProviderPhone:
+		return "Phone"
+	default:
+		return name
 	}
 }
 

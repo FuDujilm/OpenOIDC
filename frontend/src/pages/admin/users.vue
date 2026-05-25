@@ -47,8 +47,15 @@ interface UserBinding {
   id: string
   provider: string
   provider_uid: string
-  provider_name: string
+  provider_email?: string
+  provider_name?: string
+  provider_avatar?: string
+  status: string
   bound_at: string
+  unbound_at?: string
+  last_auth_status?: string
+  last_auth_check_at?: string
+  last_auth_error?: string
 }
 
 interface RiskReport {
@@ -56,6 +63,15 @@ interface RiskReport {
   reason: string
   category: string
   status: string
+  created_at: string
+}
+
+interface AuditLog {
+  id: string
+  action: string
+  resource_type?: string
+  resource_id?: string
+  details_text?: string
   created_at: string
 }
 
@@ -74,7 +90,15 @@ const creating = ref(false)
 
 const showModal = ref(false)
 const editingUser = ref<User | null>(null)
-const form = ref({ display_name: '', status: 'active', role: 'user' as string })
+const form = ref({
+  email: '',
+  email_verified: false,
+  display_name: '',
+  alias: '',
+  avatar_url: '',
+  status: 'active',
+  role: 'user' as string,
+})
 const saving = ref(false)
 
 const showDetailModal = ref(false)
@@ -83,7 +107,9 @@ const detailClients = ref<Client[]>([])
 const detailSessions = ref<UserSession[]>([])
 const detailBindings = ref<UserBinding[]>([])
 const detailRiskReports = ref<RiskReport[]>([])
+const detailAuditLogs = ref<AuditLog[]>([])
 const loadingDetail = ref(false)
+const actionLoading = ref('')
 
 const showSecurityModal = ref(false)
 const securityForm = ref({ level: 0 })
@@ -157,7 +183,11 @@ async function createUser() {
 function openEdit(user: User) {
   editingUser.value = user
   form.value = {
+    email: user.email,
+    email_verified: user.email_verified,
     display_name: user.display_name,
+    alias: user.alias || '',
+    avatar_url: user.avatar_url || '',
     status: user.status,
     role: user.role,
   }
@@ -169,7 +199,16 @@ async function saveUser() {
   saving.value = true
   error.value = ''
   try {
-    await api.put(`/admin/users/${editingUser.value.id}`, form.value)
+    const payload: Record<string, any> = {
+      email: form.value.email,
+      email_verified: form.value.email_verified,
+      display_name: form.value.display_name,
+      alias: form.value.alias,
+      avatar_url: form.value.avatar_url,
+      status: form.value.status,
+    }
+    if (auth.isSuperAdmin) payload.role = form.value.role
+    await api.put(`/admin/users/${editingUser.value.id}`, payload)
     showModal.value = false
     await fetchUsers()
   } catch (e: any) {
@@ -179,13 +218,12 @@ async function saveUser() {
   }
 }
 
-async function openDetail(user: User) {
-  detailUser.value = user
+async function loadUserDetail(user: User) {
   detailClients.value = []
   detailSessions.value = []
   detailBindings.value = []
   detailRiskReports.value = []
-  showDetailModal.value = true
+  detailAuditLogs.value = []
   loadingDetail.value = true
   try {
     const [clientsRes, detailRes] = await Promise.all([
@@ -194,14 +232,64 @@ async function openDetail(user: User) {
     ])
     detailClients.value = clientsRes.data ?? []
     if (detailRes.data) {
+      detailUser.value = { ...user, ...detailRes.data }
       detailSessions.value = detailRes.data.sessions || []
       detailBindings.value = detailRes.data.bindings || []
       detailRiskReports.value = detailRes.data.risk_reports || []
+      detailAuditLogs.value = detailRes.data.audit_logs || []
     }
   } catch (e: any) {
     error.value = e.message
   } finally {
     loadingDetail.value = false
+  }
+}
+
+async function openDetail(user: User) {
+  detailUser.value = user
+  showDetailModal.value = true
+  await loadUserDetail(user)
+}
+
+async function revokeSession(session: UserSession) {
+  if (!detailUser.value) return
+  actionLoading.value = `session:${session.id}`
+  error.value = ''
+  try {
+    await api.del(`/admin/users/${detailUser.value.id}/sessions/${session.id}`)
+    await loadUserDetail(detailUser.value)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    actionLoading.value = ''
+  }
+}
+
+async function unbindSocial(binding: UserBinding) {
+  if (!detailUser.value) return
+  actionLoading.value = `binding:${binding.provider}`
+  error.value = ''
+  try {
+    await api.del(`/admin/users/${detailUser.value.id}/bindings/${encodeURIComponent(binding.provider)}`)
+    await loadUserDetail(detailUser.value)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    actionLoading.value = ''
+  }
+}
+
+async function handleRiskReport(report: RiskReport, action: 'confirm' | 'dismiss') {
+  if (!detailUser.value) return
+  actionLoading.value = `risk:${report.id}:${action}`
+  error.value = ''
+  try {
+    await api.put(`/admin/risk/reports/${report.id}/${action}`, {})
+    await loadUserDetail(detailUser.value)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    actionLoading.value = ''
   }
 }
 
@@ -479,12 +567,19 @@ function statusLabel(status: string) {
           <div v-if="detailSessions.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noSessions') }}</div>
           <div v-else class="border border-border rounded-lg overflow-hidden">
             <table class="w-full text-sm">
-              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.ip') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.userAgent') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.createdAt') }}</th></tr></thead>
+              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.ip') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.userAgent') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.createdAt') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="sess in detailSessions" :key="sess.id">
-                  <td class="px-3 py-2 font-mono text-xs">{{ sess.ip }}</td>
-                  <td class="px-3 py-2 text-xs truncate max-w-[200px]">{{ sess.user_agent }}</td>
+                  <td class="px-3 py-2 font-mono text-xs">{{ sess.ip || '-' }}</td>
+                  <td class="px-3 py-2 text-xs truncate max-w-[200px]">{{ sess.user_agent || '-' }}</td>
                   <td class="px-3 py-2 text-xs text-muted-foreground">{{ formatDate(sess.created_at) }}</td>
+                  <td class="px-3 py-2">
+                    <button
+                      @click="revokeSession(sess)"
+                      :disabled="actionLoading === `session:${sess.id}`"
+                      class="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
+                    >{{ $t('adminUserDetail.revokeSession') }}</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -497,12 +592,26 @@ function statusLabel(status: string) {
           <div v-if="detailBindings.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noBindings') }}</div>
           <div v-else class="border border-border rounded-lg overflow-hidden">
             <table class="w-full text-sm">
-              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.provider') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.providerName') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.boundAt') }}</th></tr></thead>
+              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.provider') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.providerName') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.authStatus') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.boundAt') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="binding in detailBindings" :key="binding.id">
                   <td class="px-3 py-2 font-mono text-xs">{{ binding.provider }}</td>
-                  <td class="px-3 py-2 text-xs">{{ binding.provider_name || binding.provider_uid }}</td>
+                  <td class="px-3 py-2 text-xs">
+                    <div>{{ binding.provider_name || binding.provider_uid }}</div>
+                    <div class="text-muted-foreground">{{ binding.provider_email || '-' }}</div>
+                  </td>
+                  <td class="px-3 py-2 text-xs">
+                    <div>{{ binding.last_auth_status || binding.status }}</div>
+                    <div v-if="binding.last_auth_error" class="text-destructive truncate max-w-[160px]">{{ binding.last_auth_error }}</div>
+                  </td>
                   <td class="px-3 py-2 text-xs text-muted-foreground">{{ formatDate(binding.bound_at) }}</td>
+                  <td class="px-3 py-2">
+                    <button
+                      @click="unbindSocial(binding)"
+                      :disabled="actionLoading === `binding:${binding.provider}`"
+                      class="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
+                    >{{ $t('adminUserDetail.unbindSocial') }}</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -515,13 +624,46 @@ function statusLabel(status: string) {
           <div v-if="detailRiskReports.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noRiskReports') }}</div>
           <div v-else class="border border-border rounded-lg overflow-hidden">
             <table class="w-full text-sm">
-              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminRisk.category') }}</th><th class="px-3 py-2">{{ $t('adminRisk.reason') }}</th><th class="px-3 py-2">{{ $t('adminUsers.status') }}</th><th class="px-3 py-2">{{ $t('adminRisk.time') }}</th></tr></thead>
+              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminRisk.category') }}</th><th class="px-3 py-2">{{ $t('adminRisk.reason') }}</th><th class="px-3 py-2">{{ $t('adminUsers.status') }}</th><th class="px-3 py-2">{{ $t('adminRisk.time') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="report in detailRiskReports" :key="report.id">
                   <td class="px-3 py-2 text-xs">{{ report.category }}</td>
                   <td class="px-3 py-2 text-xs">{{ report.reason }}</td>
                   <td class="px-3 py-2 text-xs">{{ report.status }}</td>
                   <td class="px-3 py-2 text-xs text-muted-foreground">{{ formatDate(report.created_at) }}</td>
+                  <td class="px-3 py-2">
+                    <div v-if="report.status === 'pending'" class="flex gap-2">
+                      <button
+                        @click="handleRiskReport(report, 'confirm')"
+                        :disabled="actionLoading === `risk:${report.id}:confirm`"
+                        class="text-xs font-medium hover:underline disabled:opacity-50"
+                      >{{ $t('adminUserDetail.confirmRisk') }}</button>
+                      <button
+                        @click="handleRiskReport(report, 'dismiss')"
+                        :disabled="actionLoading === `risk:${report.id}:dismiss`"
+                        class="text-xs font-medium text-muted-foreground hover:underline disabled:opacity-50"
+                      >{{ $t('adminUserDetail.dismissRisk') }}</button>
+                    </div>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <!-- Audit Logs -->
+        <div class="mt-6">
+          <h3 class="font-medium mb-2">{{ $t('adminUserDetail.auditLogs') }}</h3>
+          <div v-if="detailAuditLogs.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noAuditLogs') }}</div>
+          <div v-else class="border border-border rounded-lg overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.action') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.resource') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.details') }}</th><th class="px-3 py-2">{{ $t('adminRisk.time') }}</th></tr></thead>
+              <tbody class="divide-y divide-border">
+                <tr v-for="log in detailAuditLogs" :key="log.id">
+                  <td class="px-3 py-2 text-xs">{{ log.action }}</td>
+                  <td class="px-3 py-2 text-xs text-muted-foreground">{{ log.resource_type || '-' }}</td>
+                  <td class="px-3 py-2 text-xs truncate max-w-[220px]">{{ log.details_text || '-' }}</td>
+                  <td class="px-3 py-2 text-xs text-muted-foreground">{{ formatDate(log.created_at) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -538,8 +680,24 @@ function statusLabel(status: string) {
         </div>
         <form @submit.prevent="saveUser" class="flex flex-col gap-4">
           <div>
+            <label class="block text-sm font-medium mb-1.5">{{ $t('adminUsers.emailLabel') }}</label>
+            <input v-model="form.email" type="email" required class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+          </div>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="form.email_verified" type="checkbox" class="rounded border-border" />
+            {{ $t('adminUsers.emailVerified') }}
+          </label>
+          <div>
             <label class="block text-sm font-medium mb-1.5">{{ $t('adminUsers.displayName') }}</label>
             <input v-model="form.display_name" type="text" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">{{ $t('adminUsers.alias') }}</label>
+            <input v-model="form.alias" type="text" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">{{ $t('adminUsers.avatarUrl') }}</label>
+            <input v-model="form.avatar_url" type="url" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
           </div>
           <div>
             <label class="block text-sm font-medium mb-1.5">{{ $t('adminUsers.status') }}</label>

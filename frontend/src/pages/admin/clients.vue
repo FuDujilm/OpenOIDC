@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
-import { Plus, Pencil, Trash2, Loader2, RefreshCw, X, Copy, Check, AlertTriangle } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, Loader2, RefreshCw, X, Copy, Check, AlertTriangle, Power } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -11,18 +11,25 @@ interface Client {
   client_id: string
   client_name: string
   description?: string
+  logo_url?: string
+  homepage_url?: string
   owner_user_id?: string
   owner_email?: string
   owner_display_name?: string
   client_secret?: string
   redirect_uris: string[]
+  post_logout_redirect_uris?: string[]
   grant_types: string[]
+  response_types: string[]
   scopes: string[]
+  token_endpoint_auth_method: string
   min_security_level: number
+  require_email_verified: boolean
   protocol_type: string
   is_confidential: boolean
   is_active: boolean
   created_at: string
+  updated_at: string
 }
 
 const clients = ref<Client[]>([])
@@ -39,20 +46,29 @@ const saving = ref(false)
 const form = ref({
   client_name: '',
   description: '',
+  logo_url: '',
+  homepage_url: '',
   redirect_uris: '',
+  post_logout_redirect_uris: '',
   grant_types: [] as string[],
-  scopes: '',
+  response_types: 'code',
+  scopes: ['openid', 'profile', 'email'] as string[],
+  token_endpoint_auth_method: 'client_secret_basic',
   min_security_level: 0,
+  require_email_verified: true,
   protocol_type: 'oidc',
   is_confidential: true,
   is_active: true,
 })
 
 const allGrantTypes = ['authorization_code', 'refresh_token', 'client_credentials']
+const allScopes = ['openid', 'profile', 'email', 'security_level', 'offline_access']
+const allTokenEndpointAuthMethods = ['client_secret_basic', 'client_secret_post']
 
 const showSecretModal = ref(false)
 const revealedSecret = ref('')
 const secretCopied = ref(false)
+const detailSecretCopied = ref(false)
 
 const showRotateModal = ref(false)
 const rotatingClient = ref<Client | null>(null)
@@ -61,6 +77,7 @@ const rotating = ref(false)
 const showDeleteModal = ref(false)
 const deletingClient = ref<Client | null>(null)
 const deleting = ref(false)
+const togglingClientId = ref('')
 
 onMounted(fetchClients)
 
@@ -85,10 +102,16 @@ function openCreate() {
   form.value = {
     client_name: '',
     description: '',
+    logo_url: '',
+    homepage_url: '',
     redirect_uris: '',
+    post_logout_redirect_uris: '',
     grant_types: ['authorization_code', 'refresh_token'],
-    scopes: 'openid profile email',
+    response_types: 'code',
+    scopes: ['openid', 'profile', 'email'],
+    token_endpoint_auth_method: 'client_secret_basic',
     min_security_level: 0,
+    require_email_verified: true,
     protocol_type: 'oidc',
     is_confidential: true,
     is_active: true,
@@ -96,21 +119,34 @@ function openCreate() {
   showModal.value = true
 }
 
-function openEdit(client: Client) {
+async function openEdit(client: Client) {
   isCreate.value = false
-  editingClient.value = client
-  form.value = {
-    client_name: client.client_name,
-    description: client.description || '',
-    redirect_uris: (client.redirect_uris || []).join(', '),
-    grant_types: [...(client.grant_types || [])],
-    scopes: (client.scopes || []).join(' '),
-    min_security_level: client.min_security_level,
-    protocol_type: client.protocol_type,
-    is_confidential: client.is_confidential,
-    is_active: client.is_active,
+  error.value = ''
+  try {
+    const res = await api.get<Client>(`/admin/clients/${client.id}`)
+    const detail = res.data ?? client
+    editingClient.value = detail
+    form.value = {
+      client_name: detail.client_name,
+      description: detail.description || '',
+      logo_url: detail.logo_url || '',
+      homepage_url: detail.homepage_url || '',
+      redirect_uris: (detail.redirect_uris || []).join('\n'),
+      post_logout_redirect_uris: (detail.post_logout_redirect_uris || []).join('\n'),
+      grant_types: [...(detail.grant_types || [])],
+      response_types: (detail.response_types || ['code']).join(' '),
+      scopes: [...(detail.scopes || [])],
+      token_endpoint_auth_method: detail.token_endpoint_auth_method || (detail.is_confidential ? 'client_secret_basic' : 'none'),
+      min_security_level: detail.min_security_level,
+      require_email_verified: detail.require_email_verified,
+      protocol_type: detail.protocol_type,
+      is_confidential: detail.is_confidential,
+      is_active: detail.is_active,
+    }
+    showModal.value = true
+  } catch (e: any) {
+    error.value = e.message
   }
-  showModal.value = true
 }
 
 function toggleGrant(grant: string) {
@@ -119,17 +155,38 @@ function toggleGrant(grant: string) {
   else form.value.grant_types.push(grant)
 }
 
+function toggleScope(scope: string) {
+  const idx = form.value.scopes.indexOf(scope)
+  if (idx >= 0) form.value.scopes.splice(idx, 1)
+  else form.value.scopes.push(scope)
+}
+
+function normalizeClientType() {
+  if (!form.value.is_confidential) {
+    form.value.token_endpoint_auth_method = 'none'
+  } else if (form.value.token_endpoint_auth_method === 'none' || !form.value.token_endpoint_auth_method) {
+    form.value.token_endpoint_auth_method = 'client_secret_basic'
+  }
+}
+
 async function saveClient() {
+  normalizeClientType()
   saving.value = true
   error.value = ''
   try {
     const payload = {
       client_name: form.value.client_name,
       description: form.value.description,
-      redirect_uris: form.value.redirect_uris.split(',').map(s => s.trim()).filter(Boolean),
+      logo_url: form.value.logo_url,
+      homepage_url: form.value.homepage_url,
+      redirect_uris: form.value.redirect_uris.split(/[\n,]+/).map(s => s.trim()).filter(Boolean),
+      post_logout_redirect_uris: form.value.post_logout_redirect_uris.split(/[\n,]+/).map(s => s.trim()).filter(Boolean),
       grant_types: form.value.grant_types,
-      scopes: form.value.scopes.split(/[\s,]+/).filter(Boolean),
+      response_types: form.value.response_types.split(/[\s,]+/).filter(Boolean),
+      scopes: form.value.scopes,
+      token_endpoint_auth_method: form.value.is_confidential ? form.value.token_endpoint_auth_method : 'none',
       min_security_level: form.value.min_security_level,
+      require_email_verified: form.value.require_email_verified,
       protocol_type: form.value.protocol_type,
       is_confidential: form.value.is_confidential,
       is_active: form.value.is_active,
@@ -183,6 +240,13 @@ async function copySecret() {
   setTimeout(() => (secretCopied.value = false), 2000)
 }
 
+async function copyClientSecret(secret?: string) {
+  if (!secret) return
+  await navigator.clipboard.writeText(secret)
+  detailSecretCopied.value = true
+  setTimeout(() => (detailSecretCopied.value = false), 2000)
+}
+
 function confirmDelete(client: Client) {
   deletingClient.value = client
   showDeleteModal.value = true
@@ -200,6 +264,19 @@ async function deleteClient() {
     error.value = e.message
   } finally {
     deleting.value = false
+  }
+}
+
+async function toggleClientActive(client: Client) {
+  togglingClientId.value = client.id
+  error.value = ''
+  try {
+    await api.put(`/admin/clients/${client.id}`, { is_active: !client.is_active })
+    await fetchClients()
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    togglingClientId.value = ''
   }
 }
 
@@ -221,8 +298,20 @@ function grantLabel(grant: string) {
   return t(`adminClients.grantTypeLabels.${grant}`)
 }
 
+function scopeDescription(scope: string) {
+  return t(`adminClients.scopeDescriptions.${scope}`)
+}
+
+function tokenEndpointAuthMethodLabel(method: string) {
+  return t(`adminClients.tokenEndpointAuthMethodLabels.${method}`)
+}
+
 function ownerLabel(client: Client) {
   return client.owner_email || client.owner_display_name || t('adminClients.noOwner')
+}
+
+function formatDateTime(value: string) {
+  return value ? new Date(value).toLocaleString() : '-'
 }
 </script>
 
@@ -238,21 +327,6 @@ function ownerLabel(client: Client) {
       </button>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-      <div class="rounded-xl border border-border bg-muted/30 p-4 text-sm">
-        <div class="font-medium mb-1">{{ $t('adminClients.adminScopeTitle') }}</div>
-        <p class="text-muted-foreground">{{ $t('adminClients.adminScopeDesc') }}</p>
-      </div>
-      <div class="rounded-xl border border-border bg-muted/30 p-4 text-sm">
-        <div class="font-medium mb-1">{{ $t('adminClients.developerScopeTitle') }}</div>
-        <p class="text-muted-foreground">{{ $t('adminClients.developerScopeDesc') }}</p>
-      </div>
-      <div class="rounded-xl border border-border bg-muted/30 p-4 text-sm">
-        <div class="font-medium mb-1">{{ $t('adminClients.securityScopeTitle') }}</div>
-        <p class="text-muted-foreground">{{ $t('adminClients.securityScopeDesc') }}</p>
-      </div>
-    </div>
-
     <div v-if="error" class="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
       {{ error }}
     </div>
@@ -266,40 +340,47 @@ function ownerLabel(client: Client) {
         <thead class="bg-muted/50 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
           <tr>
             <th class="px-4 py-3">{{ $t('adminClients.clientName') }}</th>
-            <th class="px-4 py-3">{{ $t('adminClients.owner') }}</th>
             <th class="px-4 py-3">{{ $t('adminClients.clientId') }}</th>
-            <th class="px-4 py-3">{{ $t('adminClients.grantTypes') }}</th>
-            <th class="px-4 py-3">{{ $t('adminClients.minSecurityLevel') }}</th>
+            <th class="px-4 py-3">{{ $t('adminClients.owner') }}</th>
             <th class="px-4 py-3">{{ $t('adminClients.isActive') }}</th>
-            <th class="px-4 py-3">{{ $t('actions') }}</th>
+            <th class="px-4 py-3">{{ $t('adminClients.updatedAt') }}</th>
+            <th class="px-4 py-3 w-56 text-right">{{ $t('actions') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
           <tr v-if="clients.length === 0">
-            <td colspan="7" class="px-4 py-8 text-center text-muted-foreground">{{ $t('adminClients.noClients') }}</td>
+            <td colspan="6" class="px-4 py-8 text-center text-muted-foreground">{{ $t('adminClients.noClients') }}</td>
           </tr>
           <tr v-for="client in clients" :key="client.id" class="hover:bg-muted/30 transition-colors">
             <td class="px-4 py-3">
-              <div class="font-medium">{{ client.client_name }}</div>
-              <div class="text-xs text-muted-foreground max-w-56 truncate">{{ client.description || $t('adminClients.noDescription') }}</div>
-            </td>
-            <td class="px-4 py-3 text-muted-foreground text-xs">{{ ownerLabel(client) }}</td>
-            <td class="px-4 py-3 font-mono text-xs text-muted-foreground">{{ client.client_id }}</td>
-            <td class="px-4 py-3">
-              <div class="flex flex-wrap gap-1">
-                <span v-for="g in client.grant_types" :key="g" class="text-xs bg-muted px-1.5 py-0.5 rounded">{{ grantLabel(g) }}</span>
+              <div class="flex items-center gap-3 min-w-0">
+                <img v-if="client.logo_url" :src="client.logo_url" :alt="client.client_name" class="w-9 h-9 rounded-lg object-cover border border-border shrink-0" />
+                <div v-else class="w-9 h-9 rounded-lg bg-muted shrink-0"></div>
+                <div class="min-w-0">
+                  <div class="font-medium truncate max-w-72">{{ client.client_name }}</div>
+                  <div class="text-xs text-muted-foreground truncate max-w-72">{{ client.description || $t('adminClients.noDescription') }}</div>
+                </div>
               </div>
             </td>
-            <td class="px-4 py-3 text-muted-foreground">L{{ client.min_security_level }}</td>
+            <td class="px-4 py-3 font-mono text-xs text-muted-foreground max-w-56 truncate">{{ client.client_id }}</td>
+            <td class="px-4 py-3 text-muted-foreground text-xs">
+              <div class="truncate max-w-56">{{ ownerLabel(client) }}</div>
+              <div v-if="client.owner_user_id" class="font-mono truncate max-w-56">{{ client.owner_user_id }}</div>
+            </td>
             <td class="px-4 py-3">
               <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" :class="client.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'">
                 {{ client.is_active ? $t('adminProviders.enabled') : $t('adminProviders.disabled') }}
               </span>
             </td>
+            <td class="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{{ formatDateTime(client.updated_at || client.created_at) }}</td>
             <td class="px-4 py-3">
-              <div class="flex items-center gap-1 flex-wrap">
+              <div class="flex items-center justify-end gap-1 flex-wrap">
                 <button @click="openEdit(client)" class="text-xs font-medium px-2 py-1 rounded hover:bg-muted transition-colors flex items-center gap-1">
                   <Pencil class="w-3 h-3" /> {{ $t('edit') }}
+                </button>
+                <button @click="toggleClientActive(client)" :disabled="togglingClientId === client.id" class="text-xs font-medium px-2 py-1 rounded hover:bg-muted transition-colors flex items-center gap-1">
+                  <Loader2 v-if="togglingClientId === client.id" class="w-3 h-3 animate-spin" />
+                  <Power v-else class="w-3 h-3" /> {{ client.is_active ? $t('adminClients.disable') : $t('adminClients.enable') }}
                 </button>
                 <button v-if="client.is_confidential" @click="confirmRotate(client)" class="text-xs font-medium px-2 py-1 rounded hover:bg-muted transition-colors flex items-center gap-1">
                   <RefreshCw class="w-3 h-3" /> {{ $t('adminClients.rotateSecret') }}
@@ -323,64 +404,151 @@ function ownerLabel(client: Client) {
     </div>
 
     <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" @click.self="showModal = false">
-      <div class="bg-white rounded-xl shadow-lg w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-4xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-5">
           <h2 class="text-lg font-semibold">{{ isCreate ? $t('adminClients.createClient') : $t('adminClients.editClient') }}</h2>
           <button @click="showModal = false" class="text-muted-foreground hover:text-foreground"><X class="w-5 h-5" /></button>
         </div>
-        <form @submit.prevent="saveClient" class="flex flex-col gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.clientName') }}</label>
-            <input v-model="form.client_name" type="text" required :placeholder="$t('adminClients.clientNamePlaceholder')" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
-            <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.clientNameHint') }}</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.description') }}</label>
-            <input v-model="form.description" type="text" :placeholder="$t('adminClients.descriptionPlaceholder')" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.redirectUris') }}</label>
-            <input v-model="form.redirect_uris" type="text" placeholder="https://app.example.com/callback" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
-            <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.redirectUrisHint') }}</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.grantTypes') }}</label>
-            <div class="flex flex-col gap-2">
-              <label v-for="grant in allGrantTypes" :key="grant" class="flex items-center justify-between gap-3 text-sm cursor-pointer px-3 py-2 border rounded-lg transition-colors" :class="form.grant_types.includes(grant) ? 'border-foreground bg-foreground/5' : 'border-border'">
-                <span>{{ grantLabel(grant) }}</span>
-                <input type="checkbox" :checked="form.grant_types.includes(grant)" @change="toggleGrant(grant)" class="rounded border-border" />
-              </label>
+        <form @submit.prevent="saveClient" class="flex flex-col gap-5">
+          <section v-if="!isCreate && editingClient" class="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+            <h3 class="text-sm font-semibold">{{ $t('adminClients.detailSection') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div>
+                <div class="text-xs text-muted-foreground mb-1">{{ $t('adminClients.clientId') }}</div>
+                <div class="font-mono text-xs break-all">{{ editingClient.client_id }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted-foreground mb-1">{{ $t('adminClients.owner') }}</div>
+                <div>{{ ownerLabel(editingClient) }}</div>
+                <div v-if="editingClient.owner_user_id" class="font-mono text-xs text-muted-foreground break-all">{{ editingClient.owner_user_id }}</div>
+              </div>
+              <div v-if="editingClient.client_secret" class="md:col-span-2">
+                <div class="text-xs text-muted-foreground mb-1">{{ $t('adminClients.clientSecret') }}</div>
+                <div class="flex items-center gap-2 bg-white rounded-lg border border-border p-3">
+                  <code class="flex-1 text-xs font-mono break-all">{{ editingClient.client_secret }}</code>
+                  <button type="button" @click="copyClientSecret(editingClient.client_secret)" class="shrink-0 p-2 rounded-lg hover:bg-muted transition-colors">
+                    <Check v-if="detailSecretCopied" class="w-4 h-4 text-green-600" />
+                    <Copy v-else class="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div class="text-xs text-muted-foreground mb-1">{{ $t('adminClients.createdAt') }}</div>
+                <div>{{ formatDateTime(editingClient.created_at) }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted-foreground mb-1">{{ $t('adminClients.updatedAt') }}</div>
+                <div>{{ formatDateTime(editingClient.updated_at) }}</div>
+              </div>
             </div>
-            <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.grantTypesHint') }}</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.scopes') }}</label>
-            <input v-model="form.scopes" type="text" placeholder="openid profile email" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
-            <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.scopesHint') }}</p>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-sm font-semibold">{{ $t('adminClients.basicSection') }}</h3>
             <div>
-              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.minSecurityLevel') }}</label>
-              <input v-model.number="form.min_security_level" type="number" min="0" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
-              <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.minSecurityLevelHint') }}</p>
+              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.clientName') }}</label>
+              <input v-model="form.client_name" type="text" required :placeholder="$t('adminClients.clientNamePlaceholder')" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+              <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.clientNameHint') }}</p>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.protocol') }}</label>
-              <select v-model="form.protocol_type" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10">
-                <option value="oidc">OIDC</option>
-                <option value="oauth2">OAuth2</option>
-              </select>
+              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.description') }}</label>
+              <input v-model="form.description" type="text" :placeholder="$t('adminClients.descriptionPlaceholder')" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
             </div>
-          </div>
-          <div class="space-y-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.logoUrl') }}</label>
+                <input v-model="form.logo_url" type="url" placeholder="https://example.com/logo.png" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.homepageUrl') }}</label>
+                <input v-model="form.homepage_url" type="url" placeholder="https://example.com" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-sm font-semibold">{{ $t('adminClients.oauthSection') }}</h3>
+            <div>
+              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.redirectUris') }}</label>
+              <textarea v-model="form.redirect_uris" rows="3" placeholder="https://app.example.com/callback" class="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-foreground/10 resize-none" />
+              <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.redirectUrisHint') }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.postLogoutRedirectUris') }}</label>
+              <textarea v-model="form.post_logout_redirect_uris" rows="2" placeholder="https://app.example.com/logout-callback" class="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-foreground/10 resize-none" />
+              <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.postLogoutRedirectUrisHint') }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.grantTypes') }}</label>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <label v-for="grant in allGrantTypes" :key="grant" class="flex items-center justify-between gap-3 text-sm cursor-pointer px-3 py-2 border rounded-lg transition-colors" :class="form.grant_types.includes(grant) ? 'border-foreground bg-foreground/5' : 'border-border'">
+                  <span>{{ grantLabel(grant) }}</span>
+                  <input type="checkbox" :checked="form.grant_types.includes(grant)" @change="toggleGrant(grant)" class="rounded border-border" />
+                </label>
+              </div>
+              <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.grantTypesHint') }}</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.responseTypes') }}</label>
+                <input v-model="form.response_types" type="text" placeholder="code" class="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+                <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.responseTypesHint') }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-2">{{ $t('adminClients.scopes') }}</label>
+                <div class="flex flex-col gap-2">
+                  <label
+                    v-for="scope in allScopes"
+                    :key="scope"
+                    class="flex items-center gap-3 text-sm cursor-pointer px-3 py-2.5 border rounded-lg transition-colors"
+                    :class="form.scopes.includes(scope) ? 'border-foreground bg-foreground/5' : 'border-border'"
+                  >
+                    <input type="checkbox" :checked="form.scopes.includes(scope)" @change="toggleScope(scope)" class="sr-only" />
+                    <div class="flex flex-col">
+                      <span class="font-mono text-xs">{{ scope }}</span>
+                      <span class="text-xs text-muted-foreground">{{ scopeDescription(scope) }}</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.protocol') }}</label>
+                <select v-model="form.protocol_type" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10">
+                  <option value="oidc">OIDC</option>
+                  <option value="oauth2">OAuth2</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.tokenEndpointAuthMethod') }}</label>
+                <select v-model="form.token_endpoint_auth_method" :disabled="!form.is_confidential" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10 disabled:bg-muted/40 disabled:text-muted-foreground">
+                  <option v-if="!form.is_confidential" value="none">none</option>
+                  <option v-for="method in allTokenEndpointAuthMethods" :key="method" :value="method">{{ tokenEndpointAuthMethodLabel(method) }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1.5">{{ $t('adminClients.minSecurityLevel') }}</label>
+                <input v-model.number="form.min_security_level" type="number" min="0" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+                <p class="text-xs text-muted-foreground mt-1">{{ $t('adminClients.minSecurityLevelHint') }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-3">
+            <h3 class="text-sm font-semibold">{{ $t('adminClients.policySection') }}</h3>
             <label class="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input type="checkbox" v-model="form.is_confidential" class="rounded border-border" /> {{ $t('adminClients.confidential') }}
+              <input type="checkbox" v-model="form.require_email_verified" class="rounded border-border" /> {{ $t('adminClients.requireEmailVerified') }}
+            </label>
+            <label class="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input type="checkbox" v-model="form.is_confidential" @change="normalizeClientType" class="rounded border-border" /> {{ $t('adminClients.confidential') }}
             </label>
             <p class="text-xs text-muted-foreground">{{ $t('adminClients.confidentialHint') }}</p>
             <label v-if="!isCreate" class="flex items-center gap-2 text-sm font-medium cursor-pointer">
               <input type="checkbox" v-model="form.is_active" class="rounded border-border" /> {{ $t('adminClients.isActive') }}
             </label>
-          </div>
+          </section>
+
           <div class="flex justify-end gap-2 mt-2">
             <button type="button" @click="showModal = false" class="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors">{{ $t('cancel') }}</button>
             <button type="submit" :disabled="saving" class="bg-foreground text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-foreground/90 transition-colors disabled:opacity-50 flex items-center gap-2">

@@ -21,6 +21,7 @@ type Config struct {
 	SocialAuthSync SocialAuthSyncConfig `mapstructure:"social_auth_sync"`
 	SMS            SMSConfig
 	SMTP           SMTPConfig
+	Secrets        SecretsConfig
 }
 
 type ServerConfig struct {
@@ -140,6 +141,10 @@ type SMTPConfig struct {
 	From     string
 }
 
+type SecretsConfig struct {
+	ClientSecretEncryptionKey string `mapstructure:"client_secret_encryption_key"`
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 	v.SetConfigName("config")
@@ -210,4 +215,5 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("social_auth_sync.enabled", true)
 	v.SetDefault("social_auth_sync.interval", "1h")
 	v.SetDefault("social_auth_sync.batch_size", 100)
+	v.SetDefault("secrets.client_secret_encryption_key", "dev-client-secret-encryption-key")
 }

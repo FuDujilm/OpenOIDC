@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,9 @@ const (
 	ProviderQQ        = "qq"
 	ProviderWeChat    = "wechat"
 	ProviderPhone     = "phone"
+
+	ProviderTypeBuiltIn      = "built_in"
+	ProviderTypeCustomOAuth2 = "custom_oauth2"
 )
 
 func AllProviders() []string {
@@ -42,7 +46,36 @@ func IsValidProvider(name string) bool {
 			return true
 		}
 	}
+	return IsValidCustomProviderKey(name)
+}
+
+func IsBuiltInProvider(name string) bool {
+	for _, p := range AllProviders() {
+		if p == name {
+			return true
+		}
+	}
 	return false
+}
+
+func IsValidCustomProviderKey(name string) bool {
+	name = strings.TrimSpace(name)
+	if len(name) < 3 || len(name) > 60 {
+		return false
+	}
+	if IsBuiltInProvider(name) {
+		return false
+	}
+	if !(strings.HasPrefix(name, "custom_") || strings.HasPrefix(name, "oauth_")) {
+		return false
+	}
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 type ProviderConfig struct {
@@ -58,11 +91,122 @@ type ProviderConfig struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
+type CustomOAuth2Config struct {
+	AuthURL    string
+	TokenURL   string
+	UserURL    string
+	Scopes     []string
+	IDPath     string
+	EmailPath  string
+	NamePath   string
+	AvatarPath string
+}
+
+func ProviderType(pc *ProviderConfig) string {
+	if pc == nil {
+		return ProviderTypeBuiltIn
+	}
+	if pc.ExtraConfig != nil {
+		if typ, _ := pc.ExtraConfig["type"].(string); typ != "" {
+			return typ
+		}
+		if typ, _ := pc.ExtraConfig["provider_type"].(string); typ != "" {
+			return typ
+		}
+	}
+	if IsBuiltInProvider(pc.Provider) {
+		return ProviderTypeBuiltIn
+	}
+	return ProviderTypeCustomOAuth2
+}
+
+func IsCustomOAuth2Provider(pc *ProviderConfig) bool {
+	return ProviderType(pc) == ProviderTypeCustomOAuth2
+}
+
+func (pc *ProviderConfig) CustomOAuth2Config() CustomOAuth2Config {
+	cfg := CustomOAuth2Config{
+		IDPath:     "id",
+		EmailPath:  "email",
+		NamePath:   "name",
+		AvatarPath: "avatar_url",
+	}
+	if pc == nil || pc.ExtraConfig == nil {
+		return cfg
+	}
+	cfg.AuthURL = extraString(pc.ExtraConfig, "auth_url")
+	cfg.TokenURL = extraString(pc.ExtraConfig, "token_url")
+	cfg.UserURL = extraString(pc.ExtraConfig, "userinfo_url")
+	if cfg.UserURL == "" {
+		cfg.UserURL = extraString(pc.ExtraConfig, "user_url")
+	}
+	cfg.Scopes = extraStringSlice(pc.ExtraConfig, "scopes")
+	if v := extraString(pc.ExtraConfig, "user_id_path"); v != "" {
+		cfg.IDPath = v
+	}
+	if v := extraString(pc.ExtraConfig, "email_path"); v != "" {
+		cfg.EmailPath = v
+	}
+	if v := extraString(pc.ExtraConfig, "name_path"); v != "" {
+		cfg.NamePath = v
+	}
+	if v := extraString(pc.ExtraConfig, "avatar_path"); v != "" {
+		cfg.AvatarPath = v
+	}
+	return cfg
+}
+
 type GlobalSetting struct {
 	Key         string    `json:"key"`
 	Value       string    `json:"value"`
 	Description string    `json:"description"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func extraString(extra map[string]any, key string) string {
+	v, _ := extra[key].(string)
+	return strings.TrimSpace(v)
+}
+
+func extraStringSlice(extra map[string]any, key string) []string {
+	v, ok := extra[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch t := v.(type) {
+	case []string:
+		return cleanStringSlice(t)
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return cleanStringSlice(out)
+	case string:
+		parts := strings.FieldsFunc(t, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' })
+		return cleanStringSlice(parts)
+	default:
+		return nil
+	}
+}
+
+func cleanStringSlice(items []string) []string {
+	out := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 type AliasRestriction struct {

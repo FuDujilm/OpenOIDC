@@ -130,8 +130,7 @@ CREATE INDEX idx_security_level_changes_created_at ON security_level_changes(cre
 CREATE TABLE oidc_clients (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id VARCHAR(255) NOT NULL UNIQUE,
-    client_secret_hash TEXT NOT NULL,
-    client_secret_plain TEXT NOT NULL DEFAULT '',
+    client_secret_encrypted TEXT NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     logo_url TEXT NOT NULL DEFAULT '',
@@ -334,7 +333,7 @@ CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at);
 -- ==========================================================================
 CREATE TABLE provider_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider VARCHAR(30) NOT NULL UNIQUE,
+    provider VARCHAR(60) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL DEFAULT '',
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
     client_id TEXT NOT NULL DEFAULT '',
@@ -342,6 +341,7 @@ CREATE TABLE provider_configs (
     scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     redirect_path VARCHAR(255) NOT NULL DEFAULT '',
     extra_config JSONB,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -3,8 +3,10 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { Pencil, Loader2, X, Mail, Save, Trash2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const auth = useAuthStore()
 
 interface Setting {
   key: string
@@ -17,16 +19,29 @@ const BOOL_SETTINGS = new Set([
   'password_login_enabled',
   'social_login_enabled',
   'social_register_enabled',
+  'social_binding_enabled',
 ])
 
 const SMTP_KEYS = ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from']
+const DEDICATED_SETTING_KEYS = new Set([
+  ...SMTP_KEYS,
+  'allowed_email_domains',
+  'turnstile_site_key',
+  'turnstile_secret_key',
+  'developer_min_trust_level',
+])
 
 const SETTING_LABELS = computed<Record<string, string>>(() => ({
   registration_enabled: t('adminSettings.labels.registration_enabled'),
   password_login_enabled: t('adminSettings.labels.password_login_enabled'),
   social_login_enabled: t('adminSettings.labels.social_login_enabled'),
   social_register_enabled: t('adminSettings.labels.social_register_enabled'),
+  social_binding_enabled: t('adminSettings.labels.social_binding_enabled'),
 }))
+
+function settingDescription(setting: Setting) {
+  return SETTING_LABELS.value[setting.key] || setting.description
+}
 
 const settings = ref<Setting[]>([])
 const loading = ref(false)
@@ -74,7 +89,11 @@ function isSmtpSetting(key: string) {
   return SMTP_KEYS.includes(key)
 }
 
-const generalSettings = computed(() => settings.value.filter(s => !isSmtpSetting(s.key)))
+function isDedicatedSetting(key: string) {
+  return DEDICATED_SETTING_KEYS.has(key) || key.startsWith('developer_')
+}
+
+const generalSettings = computed(() => settings.value.filter(s => !isDedicatedSetting(s.key)))
 
 async function toggleBool(setting: Setting) {
   const newVal = setting.value === 'true' ? 'false' : 'true'
@@ -203,6 +222,9 @@ async function saveDeveloperLevel() {
       value: String(developerMinLevel.value),
       description: 'Minimum trust level required to access developer console',
     })
+    await fetchSettings()
+    await auth.fetchPublicSettings()
+    if (auth.isLoggedIn) await auth.fetchDeveloperStatus()
     success.value = t('adminSettings.developerSaved')
     setTimeout(() => (success.value = ''), 3000)
   } catch (e: any) {
@@ -288,7 +310,7 @@ async function deleteAlias(id: string) {
                 </label>
                 <code v-else class="text-xs bg-muted px-1.5 py-0.5 rounded break-all">{{ setting.value }}</code>
               </td>
-              <td class="px-4 py-3 text-muted-foreground max-w-64 truncate">{{ setting.description }}</td>
+              <td class="px-4 py-3 text-muted-foreground max-w-64 truncate">{{ settingDescription(setting) }}</td>
               <td class="px-4 py-3">
                 <button v-if="!isBoolSetting(setting.key)" @click="openEdit(setting)" class="text-xs font-medium px-2 py-1 rounded hover:bg-muted transition-colors flex items-center gap-1">
                   <Pencil class="w-3 h-3" /> {{ $t('edit') }}

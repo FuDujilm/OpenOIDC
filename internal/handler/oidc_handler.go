@@ -302,12 +302,12 @@ func (h *OIDCHandler) ConsentContext(w http.ResponseWriter, r *http.Request) {
 	}
 	JSON(w, http.StatusOK, map[string]any{
 		"client": map[string]any{
-			"client_id":     challenge.ClientID,
-			"name":          challenge.ClientName,
-			"description":   challenge.ClientDescription,
-			"logo_url":      challenge.ClientLogoURL,
-			"homepage_url":  challenge.WebsiteURL,
-			"redirect_uri":  challenge.RedirectURI,
+			"client_id":    challenge.ClientID,
+			"name":         challenge.ClientName,
+			"description":  challenge.ClientDescription,
+			"logo_url":     challenge.ClientLogoURL,
+			"homepage_url": challenge.WebsiteURL,
+			"redirect_uri": challenge.RedirectURI,
 		},
 		"developer": map[string]any{
 			"id": challenge.DeveloperID,
@@ -444,13 +444,4 @@ func buildConsentRejectRedirect(challenge consentChallenge) string {
 	}
 	redirectURL.RawQuery = q.Encode()
 	return redirectURL.String()
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

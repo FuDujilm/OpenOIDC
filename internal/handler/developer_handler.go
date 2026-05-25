@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -17,12 +18,27 @@ import (
 type DeveloperHandler struct {
 	clientSvc    *service.ClientService
 	riskSvc      *service.RiskService
+	userRepo     port.UserRepository
 	settingsRepo port.SettingsRepository
 	consentRepo  port.ConsentRepository
 }
 
-func NewDeveloperHandler(clientSvc *service.ClientService, riskSvc *service.RiskService, settingsRepo port.SettingsRepository, consentRepo port.ConsentRepository) *DeveloperHandler {
-	return &DeveloperHandler{clientSvc: clientSvc, riskSvc: riskSvc, settingsRepo: settingsRepo, consentRepo: consentRepo}
+func NewDeveloperHandler(clientSvc *service.ClientService, riskSvc *service.RiskService, userRepo port.UserRepository, settingsRepo port.SettingsRepository, consentRepo port.ConsentRepository) *DeveloperHandler {
+	return &DeveloperHandler{clientSvc: clientSvc, riskSvc: riskSvc, userRepo: userRepo, settingsRepo: settingsRepo, consentRepo: consentRepo}
+}
+
+func (h *DeveloperHandler) Status(w http.ResponseWriter, r *http.Request) {
+	userID, err := mw.GetUserID(r.Context())
+	if err != nil {
+		Error(w, http.StatusUnauthorized, "unauthenticated", err.Error())
+		return
+	}
+	status, err := h.developerStatus(r.Context(), userID)
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	JSON(w, http.StatusOK, status)
 }
 
 // ListApps returns all clients owned by the authenticated user.
@@ -63,6 +79,15 @@ func (h *DeveloperHandler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	userID, err := mw.GetUserID(r.Context())
 	if err != nil {
 		Error(w, http.StatusUnauthorized, "unauthenticated", err.Error())
+		return
+	}
+	status, err := h.developerStatus(r.Context(), userID)
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if canCreate, ok := status["can_create"].(bool); !ok || !canCreate {
+		Error(w, http.StatusForbidden, "developer_level_required", "current trust level is not enough to create developer apps")
 		return
 	}
 	var req devCreateAppRequest
@@ -287,6 +312,54 @@ func (h *DeveloperHandler) getIssuer(ctx context.Context) string {
 	return "http://localhost:8080"
 }
 
+func (h *DeveloperHandler) developerStatus(ctx context.Context, userID uuid.UUID) (map[string]any, error) {
+	minLevel := h.developerMinTrustLevel(ctx)
+	currentLevel := 0
+	emailVerified := false
+	if h.userRepo != nil {
+		user, err := h.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		currentLevel = user.SecurityLevel
+		emailVerified = user.EmailVerified
+	}
+
+	_, total, err := h.clientSvc.ListClientsByOwner(ctx, userID, 0, 1)
+	if err != nil {
+		return nil, err
+	}
+	hasClients := total > 0
+	eligible := emailVerified && currentLevel >= minLevel
+	canCreate := eligible
+
+	return map[string]any{
+		"eligible":              eligible,
+		"has_clients":           hasClients,
+		"can_access":            eligible || hasClients,
+		"can_create":            canCreate,
+		"current_trust_level":   currentLevel,
+		"min_trust_level":       minLevel,
+		"email_verified":        emailVerified,
+		"requires_email_verify": !emailVerified,
+	}, nil
+}
+
+func (h *DeveloperHandler) developerMinTrustLevel(ctx context.Context) int {
+	if h.settingsRepo == nil {
+		return 1
+	}
+	setting, err := h.settingsRepo.Get(ctx, "developer_min_trust_level")
+	if err != nil || setting == nil || strings.TrimSpace(setting.Value) == "" {
+		return 1
+	}
+	level, err := strconv.Atoi(strings.TrimSpace(setting.Value))
+	if err != nil || level < 0 {
+		return 1
+	}
+	return level
+}
+
 type devReportUserRequest struct {
 	UserID   string `json:"user_id"`
 	Reason   string `json:"reason"`
@@ -359,24 +432,25 @@ func (h *DeveloperHandler) ReportUser(w http.ResponseWriter, r *http.Request) {
 
 func devClientPayload(c *domain.OIDCClient) map[string]any {
 	return map[string]any{
-		"id":                          c.ID,
-		"client_id":                   c.ClientID,
-		"client_name":                 c.ClientName,
-		"description":                 c.Description,
-		"logo_url":                    c.LogoURL,
-		"homepage_url":                c.HomepageURL,
-		"owner_user_id":               c.OwnerUserID,
-		"redirect_uris":               c.RedirectURIs,
-		"grant_types":                 c.GrantTypes,
-		"response_types":              c.ResponseTypes,
-		"scopes":                      c.Scopes,
-		"token_endpoint_auth_method":  c.TokenEndpointAuthMethod,
-		"min_security_level":          c.MinSecurityLevel,
-		"require_email_verified":      c.RequireEmailVerified,
-		"protocol_type":               c.ProtocolType,
-		"is_active":                   c.IsActive,
-		"is_confidential":             c.IsConfidential,
-		"created_at":                  c.CreatedAt,
-		"updated_at":                  c.UpdatedAt,
+		"id":                         c.ID,
+		"client_id":                  c.ClientID,
+		"client_secret":              c.ClientSecretPlain,
+		"client_name":                c.ClientName,
+		"description":                c.Description,
+		"logo_url":                   c.LogoURL,
+		"homepage_url":               c.HomepageURL,
+		"owner_user_id":              c.OwnerUserID,
+		"redirect_uris":              c.RedirectURIs,
+		"grant_types":                c.GrantTypes,
+		"response_types":             c.ResponseTypes,
+		"scopes":                     c.Scopes,
+		"token_endpoint_auth_method": c.TokenEndpointAuthMethod,
+		"min_security_level":         c.MinSecurityLevel,
+		"require_email_verified":     c.RequireEmailVerified,
+		"protocol_type":              c.ProtocolType,
+		"is_active":                  c.IsActive,
+		"is_confidential":            c.IsConfidential,
+		"created_at":                 c.CreatedAt,
+		"updated_at":                 c.UpdatedAt,
 	}
 }

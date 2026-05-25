@@ -16,15 +16,29 @@ export interface User {
   created_at: string
 }
 
+export interface DeveloperStatus {
+  eligible: boolean
+  has_clients: boolean
+  can_access: boolean
+  can_create: boolean
+  current_trust_level: number
+  min_trust_level: number
+  email_verified: boolean
+  requires_email_verify: boolean
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const loading = ref(true)
   const developerMinTrustLevel = ref(1)
+  const developerStatus = ref<DeveloperStatus | null>(null)
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin = computed(() => user.value?.role === 'admin' || user.value?.role === 'super_admin')
   const isSuperAdmin = computed(() => user.value?.role === 'super_admin')
-  const isDeveloper = computed(() => isAdmin.value || (user.value?.security_level ?? 0) >= developerMinTrustLevel.value)
+  const isDeveloper = computed(() => canShowDeveloperConsole.value)
+  const canCreateDeveloperApp = computed(() => developerStatus.value?.can_create || false)
+  const canShowDeveloperConsole = computed(() => developerStatus.value?.can_access || false)
 
   async function fetchUser() {
     try {
@@ -46,11 +60,28 @@ export const useAuthStore = defineStore('auth', () => {
     } catch { /* use default */ }
   }
 
+  async function fetchDeveloperStatus() {
+    if (!user.value) {
+      developerStatus.value = null
+      return
+    }
+    try {
+      const res = await api.get<DeveloperStatus>('/developer/status')
+      developerStatus.value = res.data ?? null
+      if (res.data?.min_trust_level !== undefined) {
+        developerMinTrustLevel.value = res.data.min_trust_level
+      }
+    } catch {
+      developerStatus.value = null
+    }
+  }
+
   async function login(email: string, password: string, turnstileToken?: string) {
     const headers: Record<string, string> = {}
     if (turnstileToken) headers['X-Turnstile-Token'] = turnstileToken
     await api.post('/auth/login', { email, password }, headers)
     await fetchUser()
+    await fetchDeveloperStatus()
   }
 
   async function register(email: string, password: string, display_name: string, turnstileToken?: string) {
@@ -62,7 +93,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try { await api.post('/auth/logout') } catch { /* ignore */ }
     user.value = null
+    developerStatus.value = null
   }
 
-  return { user, loading, developerMinTrustLevel, isLoggedIn, isAdmin, isSuperAdmin, isDeveloper, fetchUser, fetchPublicSettings, login, register, logout }
+  return { user, loading, developerMinTrustLevel, developerStatus, isLoggedIn, isAdmin, isSuperAdmin, isDeveloper, canShowDeveloperConsole, canCreateDeveloperApp, fetchUser, fetchPublicSettings, fetchDeveloperStatus, login, register, logout }
 })
