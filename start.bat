@@ -23,7 +23,7 @@ echo   Admin: see configs\config.yaml
 echo ============================================
 echo.
 
-oidc-platform.exe
+oidc.exe
 
 if %errorlevel% neq 0 (
     echo.
