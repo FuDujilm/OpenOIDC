@@ -421,6 +421,10 @@ func seedSettings(ctx context.Context, repo port.SettingsRepository, cfg *config
 		"captcha_provider":                         "turnstile",
 		"captcha_site_key":                         "",
 		"captcha_secret_key":                       "",
+		"risk_policy_enabled":                      "true",
+		"risk_blocked_ips":                         "",
+		"risk_blocked_emails":                      "",
+		"risk_blocked_email_domains":               "",
 		"passkey_enabled":                          "true",
 	}
 	for key, value := range defaults {

@@ -515,8 +515,8 @@ function formatValue(cond: RuleCondition) {
       {{ $t('adminRules.noRules') }}
     </div>
 
-    <div v-else class="border border-border rounded-xl overflow-hidden">
-      <table class="w-full text-sm">
+    <div v-else class="border border-border rounded-xl overflow-x-auto">
+      <table class="w-full min-w-[860px] text-sm">
         <thead class="bg-muted/50 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
           <tr>
             <th class="px-4 py-3">{{ $t('adminRules.name') }}</th>

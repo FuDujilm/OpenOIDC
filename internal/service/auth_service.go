@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -45,7 +46,7 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) SendRegisterCode(ctx context.Context, email string) error {
+func (s *AuthService) SendRegisterCode(ctx context.Context, email, ip string) error {
 	if !s.isSettingEnabled(ctx, "registration_enabled") {
 		return ErrRegistrationDisabled
 	}
@@ -56,6 +57,9 @@ func (s *AuthService) SendRegisterCode(ctx context.Context, email string) error 
 	email = strings.ToLower(strings.TrimSpace(email))
 	if _, err := mail.ParseAddress(email); err != nil {
 		return ErrInvalidEmail
+	}
+	if err := s.checkAuthRisk(ctx, "register_code", email, ip, nil); err != nil {
+		return err
 	}
 	if err := s.validateEmailDomain(ctx, email); err != nil {
 		return err
@@ -82,7 +86,7 @@ func (s *AuthService) SendRegisterCode(ctx context.Context, email string) error 
 	return nil
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password, displayName, code string) (*domain.User, error) {
+func (s *AuthService) Register(ctx context.Context, email, password, displayName, code, ip string) (*domain.User, error) {
 	if !s.isSettingEnabled(ctx, "registration_enabled") {
 		return nil, ErrRegistrationDisabled
 	}
@@ -90,6 +94,9 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 	email = strings.ToLower(strings.TrimSpace(email))
 	if _, err := mail.ParseAddress(email); err != nil {
 		return nil, ErrInvalidEmail
+	}
+	if err := s.checkAuthRisk(ctx, "register", email, ip, nil); err != nil {
+		return nil, err
 	}
 	if err := s.validatePassword(ctx, password); err != nil {
 		return nil, err
@@ -155,6 +162,9 @@ func (s *AuthService) Login(ctx context.Context, email, password, ip, userAgent 
 	}
 
 	email = strings.ToLower(strings.TrimSpace(email))
+	if err := s.checkAuthRisk(ctx, "login", email, ip, nil); err != nil {
+		return nil, err
+	}
 
 	// Check login lockout before anything else.
 	if s.isLockedOut(ctx, email) {
@@ -285,8 +295,11 @@ func (s *AuthService) VerifyEmail(ctx context.Context, token string) error {
 	return nil
 }
 
-func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
+func (s *AuthService) ForgotPassword(ctx context.Context, email, ip string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
+	if err := s.checkAuthRisk(ctx, "forgot_password", email, ip, nil); err != nil {
+		return err
+	}
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, port.ErrNotFound) {
@@ -423,6 +436,94 @@ func (s *AuthService) isSettingEnabled(ctx context.Context, key string) bool {
 		return true
 	}
 	return setting.Value != "false"
+}
+
+func (s *AuthService) settingValue(ctx context.Context, key string) string {
+	if s.settingsRepo == nil {
+		return ""
+	}
+	setting, err := s.settingsRepo.Get(ctx, key)
+	if err != nil || setting == nil {
+		return ""
+	}
+	return strings.TrimSpace(setting.Value)
+}
+
+func (s *AuthService) checkAuthRisk(ctx context.Context, action, email, ip string, userID *uuid.UUID) error {
+	if !s.isSettingEnabled(ctx, "risk_policy_enabled") {
+		return nil
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	ip = strings.TrimSpace(ip)
+
+	if email != "" && listContainsFold(s.settingValue(ctx, "risk_blocked_emails"), email) {
+		s.auditRiskBlock(ctx, userID, action, ip, "email", email)
+		return ErrRiskBlocked
+	}
+	if domain := emailDomain(email); domain != "" && listContainsFold(s.settingValue(ctx, "risk_blocked_email_domains"), domain) {
+		s.auditRiskBlock(ctx, userID, action, ip, "email_domain", domain)
+		return ErrRiskBlocked
+	}
+	if ipMatchesList(ip, s.settingValue(ctx, "risk_blocked_ips")) {
+		s.auditRiskBlock(ctx, userID, action, ip, "ip", ip)
+		return ErrRiskBlocked
+	}
+	return nil
+}
+
+func (s *AuthService) auditRiskBlock(ctx context.Context, userID *uuid.UUID, action, ip, reason, value string) {
+	var ipPtr *string
+	if ip != "" {
+		ipPtr = &ip
+	}
+	s.audit(ctx, userID, "risk.auth_blocked", "risk", action, ipPtr, map[string]any{
+		"action": action,
+		"reason": reason,
+		"value":  value,
+	})
+}
+
+func listContainsFold(raw, value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return false
+	}
+	for _, item := range splitRiskList(raw) {
+		if strings.ToLower(item) == value {
+			return true
+		}
+	}
+	return false
+}
+
+func emailDomain(email string) string {
+	parts := strings.SplitN(email, "@", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(parts[1]))
+}
+
+func ipMatchesList(ip, raw string) bool {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	for _, item := range splitRiskList(raw) {
+		if prefix, err := netip.ParsePrefix(item); err == nil && prefix.Contains(addr) {
+			return true
+		}
+		if listed, err := netip.ParseAddr(item); err == nil && listed == addr {
+			return true
+		}
+	}
+	return false
+}
+
+func splitRiskList(raw string) []string {
+	return strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+	})
 }
 
 func registerCodeKey(email string) string {

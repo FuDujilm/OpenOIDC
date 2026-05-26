@@ -54,7 +54,7 @@ func (h *AuthHandler) SendRegisterCode(w http.ResponseWriter, r *http.Request) {
 		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	if err := h.authSvc.SendRegisterCode(r.Context(), req.Email); err != nil {
+	if err := h.authSvc.SendRegisterCode(r.Context(), req.Email, clientIP(r)); err != nil {
 		mapAuthError(w, err)
 		return
 	}
@@ -67,7 +67,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	user, err := h.authSvc.Register(r.Context(), req.Email, req.Password, req.DisplayName, req.Code)
+	user, err := h.authSvc.Register(r.Context(), req.Email, req.Password, req.DisplayName, req.Code, clientIP(r))
 	if err != nil {
 		mapAuthError(w, err)
 		return
@@ -130,7 +130,10 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	_ = h.authSvc.ForgotPassword(r.Context(), req.Email)
+	if err := h.authSvc.ForgotPassword(r.Context(), req.Email, clientIP(r)); err != nil && !errors.Is(err, service.ErrRiskBlocked) {
+		mapAuthError(w, err)
+		return
+	}
 	JSON(w, http.StatusOK, map[string]any{"sent": true})
 }
 
@@ -235,6 +238,8 @@ func mapAuthError(w http.ResponseWriter, err error) {
 		Error(w, http.StatusForbidden, "social_login_disabled", "social login is disabled")
 	case errors.Is(err, service.ErrSocialRegistrationDisabled):
 		Error(w, http.StatusForbidden, "social_registration_disabled", "social registration is disabled")
+	case errors.Is(err, service.ErrRiskBlocked):
+		Error(w, http.StatusForbidden, "risk_blocked", "request blocked by risk policy")
 	default:
 		Error(w, http.StatusInternalServerError, "internal", "internal server error")
 	}

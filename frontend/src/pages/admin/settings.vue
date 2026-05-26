@@ -34,6 +34,7 @@ const BOOL_SETTINGS = new Set([
   'allow_public_clients',
   'captcha_enabled',
   'turnstile_enabled',
+  'risk_policy_enabled',
   'social_login_enabled',
   'social_register_enabled',
   'social_binding_enabled',
@@ -413,8 +414,8 @@ async function deleteAlias(id: string) {
       </div>
 
       <!-- General Settings -->
-      <div class="border border-border rounded-xl overflow-hidden mb-8">
-        <table class="w-full text-sm">
+      <div class="border border-border rounded-xl overflow-x-auto mb-8">
+        <table class="w-full min-w-[760px] text-sm">
           <thead class="bg-muted/50 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
             <tr>
               <th class="px-4 py-3">{{ $t('adminSettings.key') }}</th>

@@ -37,6 +37,31 @@ func NewAdminHandler(adminSvc *service.AdminService, clientSvc *service.ClientSe
 	return &AdminHandler{adminSvc: adminSvc, clientSvc: clientSvc, securitySvc: securitySvc, userRepo: userRepo, socialRegistry: socialRegistry, riskSvc: riskSvc, sessionRepo: sessionRepo, bindingRepo: bindingRepo, consentRepo: consentRepo}
 }
 
+func (h *AdminHandler) ensureCanManageTargetUser(ctx context.Context, targetID uuid.UUID, allowSelf bool) (*domain.User, error) {
+	callerID, err := mw.GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	caller, err := h.userRepo.GetByID(ctx, callerID)
+	if err != nil {
+		return nil, err
+	}
+	target, err := h.userRepo.GetByID(ctx, targetID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			return nil, service.ErrNotFound
+		}
+		return nil, err
+	}
+	if caller.ID == target.ID && !allowSelf {
+		return nil, fmt.Errorf("%w: cannot perform this action on your own account", service.ErrPermissionDenied)
+	}
+	if target.IsSuperAdmin() && !caller.IsSuperAdmin() {
+		return nil, fmt.Errorf("%w: only super_admin can manage super_admin accounts", service.ErrPermissionDenied)
+	}
+	return target, nil
+}
+
 // ---------------- Users ----------------
 
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +122,10 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, true); err != nil {
+		mapAdminError(w, err)
+		return
+	}
 
 	// Validate role value if provided.
 	if req.Role != nil {
@@ -145,6 +174,10 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		Error(w, http.StatusBadRequest, "invalid_id", err.Error())
+		return
+	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+		mapAdminError(w, err)
 		return
 	}
 	if err := h.adminSvc.DeleteUser(r.Context(), id); err != nil {
@@ -214,6 +247,10 @@ func (h *AdminHandler) OverrideSecurityLevel(w http.ResponseWriter, r *http.Requ
 		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+		mapAdminError(w, err)
+		return
+	}
 	if err := h.adminSvc.OverrideSecurityLevel(r.Context(), id, req.Level); err != nil {
 		mapAdminError(w, err)
 		return
@@ -240,6 +277,10 @@ func (h *AdminHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request)
 		Error(w, http.StatusBadRequest, "invalid_input", "new_password is required")
 		return
 	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+		mapAdminError(w, err)
+		return
+	}
 	if err := h.adminSvc.ResetUserPassword(r.Context(), id, req.NewPassword); err != nil {
 		mapAdminError(w, err)
 		return
@@ -260,6 +301,10 @@ func (h *AdminHandler) RevokeUserSession(w http.ResponseWriter, r *http.Request)
 	sessionID, err := uuid.Parse(chi.URLParam(r, "session_id"))
 	if err != nil {
 		Error(w, http.StatusBadRequest, "invalid_session_id", err.Error())
+		return
+	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+		mapAdminError(w, err)
 		return
 	}
 	sessions, err := h.sessionRepo.ListByUser(r.Context(), id)
@@ -300,6 +345,10 @@ func (h *AdminHandler) UnbindUserSocial(w http.ResponseWriter, r *http.Request) 
 		Error(w, http.StatusBadRequest, "invalid_provider", "provider is required")
 		return
 	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+		mapAdminError(w, err)
+		return
+	}
 	if err := h.bindingRepo.SoftUnbind(r.Context(), id, provider, "admin_unbound"); err != nil {
 		mapAdminError(w, err)
 		return
@@ -334,6 +383,10 @@ func (h *AdminHandler) DeleteUserPasskey(w http.ResponseWriter, r *http.Request)
 	passkeyID, err := uuid.Parse(chi.URLParam(r, "passkey_id"))
 	if err != nil {
 		Error(w, http.StatusBadRequest, "invalid_passkey_id", err.Error())
+		return
+	}
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+		mapAdminError(w, err)
 		return
 	}
 	if err := h.adminSvc.DeleteUserPasskey(r.Context(), id, passkeyID); err != nil {

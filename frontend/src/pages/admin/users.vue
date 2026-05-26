@@ -491,8 +491,8 @@ function roleLabel(role?: string) {
       <Loader2 class="w-5 h-5 animate-spin mr-2" /> {{ $t('loading') }}
     </div>
 
-    <div v-else class="border border-border rounded-xl overflow-hidden">
-      <table class="w-full text-sm">
+    <div v-else class="border border-border rounded-xl overflow-x-auto">
+      <table class="w-full min-w-[1080px] text-sm">
         <thead class="bg-muted/50 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
           <tr>
             <th class="px-4 py-3">{{ $t('adminUsers.user') }}</th>
@@ -631,8 +631,8 @@ function roleLabel(role?: string) {
         </div>
         <div v-if="loadingDetail" class="text-sm text-muted-foreground py-4">{{ $t('loading') }}</div>
         <div v-else-if="detailClients.length === 0" class="text-sm text-muted-foreground py-4 border border-dashed border-border rounded-lg text-center">{{ $t('adminUsers.noUserClients') }}</div>
-        <div v-else class="border border-border rounded-lg overflow-hidden">
-          <table class="w-full text-sm">
+        <div v-else class="border border-border rounded-lg overflow-x-auto">
+          <table class="w-full min-w-[720px] text-sm">
             <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminClients.clientName') }}</th><th class="px-3 py-2">{{ $t('adminClients.clientId') }}</th><th class="px-3 py-2">{{ $t('adminClients.minSecurityLevel') }}</th><th class="px-3 py-2">{{ $t('adminUsers.status') }}</th></tr></thead>
             <tbody class="divide-y divide-border">
               <tr v-for="client in detailClients" :key="client.id">
@@ -652,8 +652,8 @@ function roleLabel(role?: string) {
           </div>
           <div v-if="passkeysLoading" class="text-sm text-muted-foreground py-4">{{ $t('loading') }}</div>
           <div v-else-if="detailPasskeys.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noPasskeys') }}</div>
-          <div v-else class="border border-border rounded-lg overflow-hidden">
-            <table class="w-full text-sm">
+          <div v-else class="border border-border rounded-lg overflow-x-auto">
+            <table class="w-full min-w-[720px] text-sm">
               <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.name') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.createdAt') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.lastUsed') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.transports') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="passkey in detailPasskeys" :key="passkey.id">
@@ -678,8 +678,8 @@ function roleLabel(role?: string) {
         <div class="mt-6">
           <h3 class="font-medium mb-2">{{ $t('adminUserDetail.sessions') }}</h3>
           <div v-if="detailSessions.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noSessions') }}</div>
-          <div v-else class="border border-border rounded-lg overflow-hidden">
-            <table class="w-full text-sm">
+          <div v-else class="border border-border rounded-lg overflow-x-auto">
+            <table class="w-full min-w-[720px] text-sm">
               <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.ip') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.userAgent') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.createdAt') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="sess in detailSessions" :key="sess.id">
@@ -703,8 +703,8 @@ function roleLabel(role?: string) {
         <div class="mt-6">
           <h3 class="font-medium mb-2">{{ $t('adminUserDetail.bindings') }}</h3>
           <div v-if="detailBindings.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noBindings') }}</div>
-          <div v-else class="border border-border rounded-lg overflow-hidden">
-            <table class="w-full text-sm">
+          <div v-else class="border border-border rounded-lg overflow-x-auto">
+            <table class="w-full min-w-[720px] text-sm">
               <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.provider') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.providerName') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.authStatus') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.boundAt') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="binding in detailBindings" :key="binding.id">
@@ -735,8 +735,8 @@ function roleLabel(role?: string) {
         <div class="mt-6">
           <h3 class="font-medium mb-2">{{ $t('adminUserDetail.riskReports') }}</h3>
           <div v-if="detailRiskReports.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noRiskReports') }}</div>
-          <div v-else class="border border-border rounded-lg overflow-hidden">
-            <table class="w-full text-sm">
+          <div v-else class="border border-border rounded-lg overflow-x-auto">
+            <table class="w-full min-w-[720px] text-sm">
               <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminRisk.category') }}</th><th class="px-3 py-2">{{ $t('adminRisk.reason') }}</th><th class="px-3 py-2">{{ $t('adminUsers.status') }}</th><th class="px-3 py-2">{{ $t('adminRisk.time') }}</th><th class="px-3 py-2">{{ $t('actions') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="report in detailRiskReports" :key="report.id">
@@ -768,8 +768,8 @@ function roleLabel(role?: string) {
         <div class="mt-6">
           <h3 class="font-medium mb-2">{{ $t('adminUserDetail.auditLogs') }}</h3>
           <div v-if="detailAuditLogs.length === 0" class="text-sm text-muted-foreground py-3 border border-dashed border-border rounded-lg text-center">{{ $t('adminUserDetail.noAuditLogs') }}</div>
-          <div v-else class="border border-border rounded-lg overflow-hidden">
-            <table class="w-full text-sm">
+          <div v-else class="border border-border rounded-lg overflow-x-auto">
+            <table class="w-full min-w-[720px] text-sm">
               <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">{{ $t('adminUserDetail.action') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.resource') }}</th><th class="px-3 py-2">{{ $t('adminUserDetail.details') }}</th><th class="px-3 py-2">{{ $t('adminRisk.time') }}</th></tr></thead>
               <tbody class="divide-y divide-border">
                 <tr v-for="log in detailAuditLogs" :key="log.id">

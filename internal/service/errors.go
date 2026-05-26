@@ -29,4 +29,5 @@ var (
 	ErrSocialRegistrationDisabled = errors.New("social registration disabled")
 	ErrSocialBindingDisabled      = errors.New("social binding disabled")
 	ErrPasskeyDisabled            = errors.New("passkey disabled")
+	ErrRiskBlocked                = errors.New("request blocked by risk policy")
 )
