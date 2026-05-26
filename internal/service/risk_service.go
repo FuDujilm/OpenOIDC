@@ -51,6 +51,16 @@ func (s *RiskService) ReportUser(ctx context.Context, clientID, reporterID, targ
 		category = domain.ReportCategoryOther
 	}
 
+	existingReports, err := s.reportRepo.ListByTarget(ctx, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("list target reports: %w", err)
+	}
+	for _, existing := range existingReports {
+		if existing.ClientID == clientID && existing.ReporterID == reporterID && existing.Status != domain.ReportStatusDismissed {
+			return nil, ErrAlreadyExists
+		}
+	}
+
 	report := &domain.RiskReport{
 		ID:         uuid.New(),
 		ClientID:   clientID,
@@ -77,17 +87,6 @@ func (s *RiskService) ReportUser(ctx context.Context, clientID, reporterID, targ
 		CreatedAt:    report.CreatedAt,
 	})
 
-	// Auto-escalate: if user has >= 3 confirmed reports, auto-downgrade.
-	confirmed, _ := s.reportRepo.CountConfirmedByTarget(ctx, targetID)
-	if confirmed >= 2 { // This is the 3rd+ report (current one still pending counts toward urgency)
-		// Auto-confirm this report and trigger enforcement.
-		report.Status = domain.ReportStatusConfirmed
-		now := time.Now().UTC()
-		report.ResolvedAt = &now
-		_ = s.reportRepo.Update(ctx, report)
-		_ = s.enforceRisk(ctx, targetID, report.ID)
-	}
-
 	return report, nil
 }
 
@@ -109,6 +108,17 @@ func (s *RiskService) ConfirmReport(ctx context.Context, reportID, adminID uuid.
 	if err := s.reportRepo.Update(ctx, report); err != nil {
 		return fmt.Errorf("update report: %w", err)
 	}
+	rt := "risk_report"
+	rid := report.ID.String()
+	_ = s.auditRepo.CreateLog(ctx, &domain.AuditLog{
+		ID:           uuid.New(),
+		UserID:       &adminID,
+		Action:       "risk.report_confirmed",
+		ResourceType: &rt,
+		ResourceID:   &rid,
+		Details:      map[string]any{"target": report.TargetID.String(), "note": note},
+		CreatedAt:    now,
+	})
 
 	return s.enforceRisk(ctx, report.TargetID, report.ID)
 }
@@ -128,6 +138,17 @@ func (s *RiskService) DismissReport(ctx context.Context, reportID, adminID uuid.
 	if err := s.reportRepo.Update(ctx, report); err != nil {
 		return err
 	}
+	rt := "risk_report"
+	rid := report.ID.String()
+	_ = s.auditRepo.CreateLog(ctx, &domain.AuditLog{
+		ID:           uuid.New(),
+		UserID:       &adminID,
+		Action:       "risk.report_dismissed",
+		ResourceType: &rt,
+		ResourceID:   &rid,
+		Details:      map[string]any{"target": report.TargetID.String(), "note": note, "was_confirmed": wasConfirmed},
+		CreatedAt:    now,
+	})
 	if wasConfirmed {
 		if err := s.riskListRepo.DeleteByReport(ctx, report.ID); err != nil {
 			return fmt.Errorf("delete report risk entries: %w", err)
@@ -256,7 +277,7 @@ func (s *RiskService) ListRiskEntries(ctx context.Context, offset, limit int) ([
 }
 
 // RemoveFromRiskList removes a social account from the risk list (admin action).
-func (s *RiskService) RemoveFromRiskList(ctx context.Context, id uuid.UUID) error {
+func (s *RiskService) RemoveFromRiskList(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
 	entry, err := s.riskListRepo.GetByID(ctx, id)
 	if err != nil {
 		return err
@@ -264,6 +285,17 @@ func (s *RiskService) RemoveFromRiskList(ctx context.Context, id uuid.UUID) erro
 	if err := s.riskListRepo.Delete(ctx, id); err != nil {
 		return err
 	}
+	rt := "risk_list"
+	rid := entry.ID.String()
+	_ = s.auditRepo.CreateLog(ctx, &domain.AuditLog{
+		ID:           uuid.New(),
+		UserID:       &adminID,
+		Action:       "risk.list_removed",
+		ResourceType: &rt,
+		ResourceID:   &rid,
+		Details:      map[string]any{"provider": entry.Provider, "provider_uid": entry.ProviderUID, "user_id": entry.UserID, "reason": entry.Reason},
+		CreatedAt:    time.Now().UTC(),
+	})
 	if entry.UserID != nil {
 		return s.restoreUserIfRiskCleared(ctx, *entry.UserID)
 	}

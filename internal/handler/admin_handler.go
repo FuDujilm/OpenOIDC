@@ -1740,7 +1740,12 @@ func (h *AdminHandler) RemoveRiskEntry(w http.ResponseWriter, r *http.Request) {
 		Error(w, http.StatusBadRequest, "invalid_id", err.Error())
 		return
 	}
-	if err := h.riskSvc.RemoveFromRiskList(r.Context(), id); err != nil {
+	adminID, err := mw.GetUserID(r.Context())
+	if err != nil {
+		Error(w, http.StatusUnauthorized, "unauthenticated", err.Error())
+		return
+	}
+	if err := h.riskSvc.RemoveFromRiskList(r.Context(), id, adminID); err != nil {
 		mapAdminError(w, err)
 		return
 	}
