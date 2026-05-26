@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
+import { useToastStore } from '@/stores/toast'
 import { useI18n } from 'vue-i18n'
-import { Loader2, AlertTriangle, ShieldX, Check, X } from 'lucide-vue-next'
+import { Loader2, AlertTriangle, ShieldX, Check, X, Plus } from 'lucide-vue-next'
 
 const { t } = useI18n()
+const toast = useToastStore()
 
 interface RiskReport {
   id: string
@@ -40,6 +42,15 @@ const actionReportId = ref('')
 const actionNote = ref('')
 const actionLoading = ref(false)
 
+const addDialog = ref(false)
+const addLoading = ref(false)
+const addForm = ref({
+  provider: '',
+  provider_uid: '',
+  user_id: '',
+  reason: '',
+})
+
 onMounted(() => {
   loadReports()
   loadBlacklist()
@@ -51,7 +62,9 @@ async function loadReports() {
     const res = await api.get<RiskReport[]>('/admin/risk/reports')
     reports.value = res.data || []
     reportTotal.value = res.meta?.total || 0
-  } catch { /* ignore */ }
+  } catch (e: any) {
+    toast.error(e.message || t('adminRisk.loadReportsFailed'))
+  }
   loading.value = false
 }
 
@@ -60,7 +73,9 @@ async function loadBlacklist() {
     const res = await api.get<RiskListEntry[]>('/admin/risk/list')
     blacklist.value = res.data || []
     blacklistTotal.value = res.meta?.total || 0
-  } catch { /* ignore */ }
+  } catch (e: any) {
+    toast.error(e.message || t('adminRisk.loadBlacklistFailed'))
+  }
 }
 
 function openAction(type: 'confirm' | 'dismiss', id: string) {
@@ -80,8 +95,32 @@ async function submitAction() {
     actionDialog.value = false
     await loadReports()
     await loadBlacklist()
-  } catch { /* ignore */ }
+  } catch (e: any) {
+    toast.error(e.message || t('adminRisk.actionFailed'))
+  }
   actionLoading.value = false
+}
+
+function openAddDialog() {
+  addForm.value = { provider: '', provider_uid: '', user_id: '', reason: '' }
+  addDialog.value = true
+}
+
+async function submitAddEntry() {
+  addLoading.value = true
+  try {
+    await api.post('/admin/risk/list', {
+      provider: addForm.value.provider,
+      provider_uid: addForm.value.provider_uid,
+      user_id: addForm.value.user_id || undefined,
+      reason: addForm.value.reason,
+    })
+    addDialog.value = false
+    await loadBlacklist()
+  } catch (e: any) {
+    toast.error(e.message || t('adminRisk.addFailed'))
+  }
+  addLoading.value = false
 }
 
 async function removeEntry(id: string) {
@@ -89,7 +128,9 @@ async function removeEntry(id: string) {
   try {
     await api.del(`/admin/risk/list/${id}`)
     await loadBlacklist()
-  } catch { /* ignore */ }
+  } catch (e: any) {
+    toast.error(e.message || t('adminRisk.removeFailed'))
+  }
 }
 
 function categoryLabel(cat: string): string {
@@ -178,6 +219,14 @@ function categoryLabel(cat: string): string {
 
     <!-- Blacklist Tab -->
     <div v-else-if="tab === 'blacklist'">
+      <div class="flex justify-end mb-4">
+        <button
+          @click="openAddDialog"
+          class="px-3 py-2 text-sm font-medium bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors flex items-center gap-2"
+        >
+          <Plus class="w-4 h-4" /> {{ $t('adminRisk.addEntry') }}
+        </button>
+      </div>
       <div v-if="blacklist.length === 0" class="text-center text-muted-foreground py-12 text-sm">
         {{ $t('adminRisk.noBlacklist') }}
       </div>
@@ -246,6 +295,68 @@ function categoryLabel(cat: string): string {
             :class="actionType === 'confirm' ? 'bg-destructive text-white hover:bg-destructive/90' : 'bg-foreground text-white hover:bg-foreground/90'"
           >
             <Loader2 v-if="actionLoading" class="w-4 h-4 animate-spin" />
+            {{ $t('confirm') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Risk Entry Dialog -->
+    <div v-if="addDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold mb-2">{{ $t('adminRisk.addEntry') }}</h3>
+        <p class="text-sm text-muted-foreground mb-4">{{ $t('adminRisk.addHint') }}</p>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('adminRisk.provider') }}</label>
+            <input
+              v-model="addForm.provider"
+              type="text"
+              :placeholder="$t('adminRisk.providerPlaceholder')"
+              class="w-full px-3 py-2 border border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('adminRisk.providerUid') }}</label>
+            <input
+              v-model="addForm.provider_uid"
+              type="text"
+              :placeholder="$t('adminRisk.providerUidPlaceholder')"
+              class="w-full px-3 py-2 border border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('adminRisk.userIdOptional') }}</label>
+            <input
+              v-model="addForm.user_id"
+              type="text"
+              :placeholder="$t('adminRisk.userIdPlaceholder')"
+              class="w-full px-3 py-2 border border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('adminRisk.reason') }}</label>
+            <input
+              v-model="addForm.reason"
+              type="text"
+              :placeholder="$t('adminRisk.reasonPlaceholder')"
+              class="w-full px-3 py-2 border border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-6">
+          <button
+            @click="addDialog = false"
+            class="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
+          >
+            {{ $t('cancel') }}
+          </button>
+          <button
+            @click="submitAddEntry"
+            :disabled="addLoading || !addForm.provider || !addForm.provider_uid || !addForm.reason"
+            class="px-4 py-2 text-sm font-medium bg-foreground text-white rounded-lg hover:bg-foreground/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            <Loader2 v-if="addLoading" class="w-4 h-4 animate-spin" />
             {{ $t('confirm') }}
           </button>
         </div>

@@ -306,6 +306,9 @@ func RunMigrations(db *sql.DB) error {
 	if err := migrateSocialBindingsLifecycle(db); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`UPDATE users SET role = 'user' WHERE role IS NULL OR TRIM(role) = ''`); err != nil {
+		return fmt.Errorf("repair user roles: %w", err)
+	}
 
 	indexStmts := []string{
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)`,

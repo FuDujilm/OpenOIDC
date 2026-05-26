@@ -196,6 +196,7 @@ func NewRouter(d Deps) *chi.Mux {
 			r.Put("/risk/reports/{id}/confirm", d.AdminHandler.ConfirmRiskReport)
 			r.Put("/risk/reports/{id}/dismiss", d.AdminHandler.DismissRiskReport)
 			r.Get("/risk/list", d.AdminHandler.ListRiskList)
+			r.Post("/risk/list", d.AdminHandler.AddRiskEntry)
 			r.Delete("/risk/list/{id}", d.AdminHandler.RemoveRiskEntry)
 		})
 	})

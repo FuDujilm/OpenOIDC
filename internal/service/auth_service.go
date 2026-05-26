@@ -130,6 +130,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 		EmailVerified: true,
 		PasswordHash:  hash,
 		DisplayName:   displayName,
+		Role:          domain.RoleUser,
 		Status:        domain.UserStatusActive,
 		SecurityLevel: 0,
 		CreatedAt:     now,

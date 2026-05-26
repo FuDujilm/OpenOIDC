@@ -51,14 +51,17 @@ export function useTurnstile(siteKey: () => string) {
     }
   }
 
-  onMounted(() => {
+  function ensureRendered() {
     const key = siteKey()
     if (!key) return
     loadScript()
     window.onTurnstileLoad = renderWidget
-    // If script already loaded
     if (window.turnstile) renderWidget()
-  })
+  }
+
+  onMounted(ensureRendered)
+
+  watch(() => siteKey(), ensureRendered)
 
   onUnmounted(() => {
     if (widgetId.value && window.turnstile) {

@@ -16,7 +16,11 @@ class ApiClient {
     }
     if (body) opts.body = JSON.stringify(body)
     const res = await fetch(this.base + path, opts)
-    const data: ApiResponse<T> = await res.json()
+    const text = await res.text()
+    const isJson = res.headers.get('content-type')?.includes('application/json')
+    const data: ApiResponse<T> = text && isJson
+      ? JSON.parse(text)
+      : { success: res.ok, error: res.ok ? undefined : { code: 'request_failed', message: text || res.statusText } }
     if (!res.ok || !data.success) {
       throw new Error(data.error?.message || `Request failed: ${res.status}`)
     }

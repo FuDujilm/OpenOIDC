@@ -55,6 +55,9 @@ func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
 	if u.CreatedAt.IsZero() {
 		u.CreatedAt = now
 	}
+	if strings.TrimSpace(u.Role) == "" {
+		u.Role = domain.RoleUser
+	}
 	u.UpdatedAt = now
 
 	tx, err := r.db.BeginTx(ctx, nil)

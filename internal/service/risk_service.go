@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,12 +14,12 @@ import (
 )
 
 type RiskService struct {
-	reportRepo  port.RiskReportRepository
+	reportRepo   port.RiskReportRepository
 	riskListRepo port.RiskListRepository
-	bindingRepo port.BindingRepository
-	userRepo    port.UserRepository
-	auditRepo   port.AuditRepository
-	securitySvc *SecurityLevelService
+	bindingRepo  port.BindingRepository
+	userRepo     port.UserRepository
+	auditRepo    port.AuditRepository
+	securitySvc  *SecurityLevelService
 }
 
 func NewRiskService(
@@ -187,6 +189,52 @@ func (s *RiskService) enforceRisk(ctx context.Context, userID uuid.UUID, reportI
 // CheckRisk checks if a social account is in the risk list.
 func (s *RiskService) CheckRisk(ctx context.Context, provider, providerUID string) (*domain.RiskListEntry, error) {
 	return s.riskListRepo.Check(ctx, provider, providerUID)
+}
+
+func (s *RiskService) AddToRiskList(ctx context.Context, provider, providerUID, reason string, userID, adminID *uuid.UUID) (*domain.RiskListEntry, error) {
+	provider = strings.TrimSpace(provider)
+	providerUID = strings.TrimSpace(providerUID)
+	reason = strings.TrimSpace(reason)
+	if provider == "" {
+		return nil, fmt.Errorf("%w: provider required", ErrInvalidInput)
+	}
+	if providerUID == "" {
+		return nil, fmt.Errorf("%w: provider_uid required", ErrInvalidInput)
+	}
+	if reason == "" {
+		return nil, fmt.Errorf("%w: reason required", ErrInvalidInput)
+	}
+	if _, err := s.riskListRepo.Check(ctx, provider, providerUID); err == nil {
+		return nil, ErrAlreadyExists
+	} else if !errors.Is(err, port.ErrNotFound) {
+		return nil, err
+	}
+
+	entry := &domain.RiskListEntry{
+		ID:          uuid.New(),
+		Provider:    provider,
+		ProviderUID: providerUID,
+		UserID:      userID,
+		Reason:      reason,
+		AddedBy:     adminID,
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := s.riskListRepo.Add(ctx, entry); err != nil {
+		return nil, fmt.Errorf("add risk entry: %w", err)
+	}
+
+	rt := "risk_list"
+	rid := entry.ID.String()
+	_ = s.auditRepo.CreateLog(ctx, &domain.AuditLog{
+		ID:           uuid.New(),
+		UserID:       adminID,
+		Action:       "risk.list_added",
+		ResourceType: &rt,
+		ResourceID:   &rid,
+		Details:      map[string]any{"provider": provider, "provider_uid": providerUID, "user_id": userID, "reason": reason},
+		CreatedAt:    entry.CreatedAt,
+	})
+	return entry, nil
 }
 
 // ListRiskEntries returns the risk blacklist.

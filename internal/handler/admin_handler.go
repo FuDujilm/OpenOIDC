@@ -1273,6 +1273,13 @@ type confirmReportRequest struct {
 	Note string `json:"note"`
 }
 
+type addRiskEntryRequest struct {
+	Provider    string `json:"provider"`
+	ProviderUID string `json:"provider_uid"`
+	UserID      string `json:"user_id"`
+	Reason      string `json:"reason"`
+}
+
 func (h *AdminHandler) ConfirmRiskReport(w http.ResponseWriter, r *http.Request) {
 	if h.riskSvc == nil {
 		Error(w, http.StatusNotImplemented, "not_implemented", "risk service not available")
@@ -1334,6 +1341,38 @@ func (h *AdminHandler) ListRiskList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	PaginatedJSON(w, http.StatusOK, entries, total, offset, limit)
+}
+
+func (h *AdminHandler) AddRiskEntry(w http.ResponseWriter, r *http.Request) {
+	if h.riskSvc == nil {
+		Error(w, http.StatusNotImplemented, "not_implemented", "risk service not available")
+		return
+	}
+	adminID, err := mw.GetUserID(r.Context())
+	if err != nil {
+		Error(w, http.StatusUnauthorized, "unauthenticated", err.Error())
+		return
+	}
+	var req addRiskEntryRequest
+	if err := DecodeJSON(r, &req); err != nil {
+		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	var userID *uuid.UUID
+	if strings.TrimSpace(req.UserID) != "" {
+		id, err := uuid.Parse(strings.TrimSpace(req.UserID))
+		if err != nil {
+			Error(w, http.StatusBadRequest, "invalid_user_id", err.Error())
+			return
+		}
+		userID = &id
+	}
+	entry, err := h.riskSvc.AddToRiskList(r.Context(), req.Provider, req.ProviderUID, req.Reason, userID, &adminID)
+	if err != nil {
+		mapAdminError(w, err)
+		return
+	}
+	JSON(w, http.StatusCreated, entry)
 }
 
 func (h *AdminHandler) RemoveRiskEntry(w http.ResponseWriter, r *http.Request) {

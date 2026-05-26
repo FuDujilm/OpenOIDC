@@ -4,15 +4,17 @@ import { api } from '@/api/client'
 import { Users, Monitor, Activity, Loader2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+const { t, tm, locale } = useI18n()
 
 interface AuditEvent {
   id: string
   action: string
   user_id: string | null
+  user_uid?: number | string
   user_email?: string
   user_display_name?: string
   resource_type?: string
+  details?: Record<string, any>
   details_text?: string
   created_at: string
 }
@@ -42,15 +44,52 @@ async function fetchStats() {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleString('zh-CN', {
+  const displayLocale = String(locale.value).startsWith('en') ? 'en-US' : 'zh-CN'
+  return new Date(iso).toLocaleString(displayLocale, {
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   })
 }
 
+function recordLabel(path: string, key: string | undefined | null, fallback = '-') {
+  if (!key) return fallback
+  const record = tm(path)
+  if (record && typeof record === 'object') {
+    const value = (record as Record<string, unknown>)[key]
+    if (typeof value === 'string') return value
+  }
+  return key
+}
+
 function actionLabel(action: string): string {
-  const key = `adminOverview.actions.${action}`
-  const translated = t(key)
-  return translated !== key ? translated : action
+  return recordLabel('adminAudit.actions', action, action)
+}
+
+function formatDetailKey(key: string): string {
+  return recordLabel('adminAudit.detailKeys', key, key)
+}
+
+function formatDetailValue(value: any): string {
+  if (value === null || value === undefined || value === '') return '-'
+  const raw = String(value)
+  return recordLabel('adminAudit.detailValues', raw, raw)
+}
+
+function formatDetails(event: AuditEvent): string {
+  const details = event.details ?? {}
+  const keys = Object.keys(details)
+  if (keys.length === 0) return event.details_text || '-'
+  return keys.map(key => `${formatDetailKey(key)}=${formatDetailValue(details[key])}`).join(', ')
+}
+
+function actorDisplay(event: AuditEvent): string {
+  if (event.user_email) return event.user_email
+  return '-'
+}
+
+function uidDisplay(event: AuditEvent): string {
+  if (event.user_uid !== undefined && event.user_uid !== null) return String(event.user_uid)
+  if (event.user_id) return event.user_id
+  return '-'
 }
 
 const cards = [
@@ -91,34 +130,51 @@ onMounted(fetchStats)
           {{ t('adminOverview.noActivity') }}
         </div>
 
-        <div v-else class="border border-border rounded-xl overflow-hidden">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-border bg-muted/40">
-                <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('adminAudit.time') }}</th>
-                <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('adminAudit.actor') }}</th>
-                <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('adminAudit.action') }}</th>
-                <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('adminAudit.details') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="event in stats.recent_events" :key="event.id" class="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
-                <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">{{ formatTime(event.created_at) }}</td>
-                <td class="px-4 py-3 text-xs">
-                  <span v-if="event.user_email" class="font-medium">{{ event.user_email }}</span>
-                  <span v-else-if="event.user_id" class="text-muted-foreground font-mono">{{ event.user_id }}</span>
-                  <span v-else class="text-muted-foreground">-</span>
-                  <div v-if="event.user_email && event.user_id" class="text-muted-foreground font-mono mt-0.5">
-                    {{ event.user_id }}
-                  </div>
-                </td>
-                <td class="px-4 py-3">
-                  <span class="inline-block px-2 py-0.5 rounded-md bg-muted text-xs font-medium">{{ actionLabel(event.action) }}</span>
-                </td>
-                <td class="px-4 py-3 text-muted-foreground text-xs max-w-64 truncate">{{ event.details_text || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-else>
+          <div class="hidden md:block border border-border rounded-xl overflow-hidden">
+            <table class="w-full text-sm table-fixed">
+              <thead>
+                <tr class="border-b border-border bg-muted/40">
+                  <th class="text-left px-4 py-3 font-medium text-muted-foreground w-32">{{ t('adminAudit.time') }}</th>
+                  <th class="text-left px-4 py-3 font-medium text-muted-foreground w-56">{{ t('adminAudit.actor') }}</th>
+                  <th class="text-left px-4 py-3 font-medium text-muted-foreground w-32">{{ t('adminUsers.uid') }}</th>
+                  <th class="text-left px-4 py-3 font-medium text-muted-foreground w-40">{{ t('adminAudit.action') }}</th>
+                  <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('adminAudit.details') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="event in stats.recent_events" :key="event.id" class="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
+                  <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">{{ formatTime(event.created_at) }}</td>
+                  <td class="px-4 py-3 text-xs min-w-0">
+                    <div class="truncate" :title="actorDisplay(event)">{{ actorDisplay(event) }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-muted-foreground text-xs font-mono truncate" :title="uidDisplay(event)">{{ uidDisplay(event) }}</td>
+                  <td class="px-4 py-3">
+                    <span class="inline-block px-2 py-0.5 rounded-md bg-muted text-xs font-medium max-w-full truncate">{{ actionLabel(event.action) }}</span>
+                  </td>
+                  <td class="px-4 py-3 text-muted-foreground text-xs truncate" :title="formatDetails(event)">{{ formatDetails(event) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="md:hidden space-y-3">
+            <div v-for="event in stats.recent_events" :key="event.id" class="border border-border rounded-xl p-4 bg-background">
+              <div class="flex items-start justify-between gap-3">
+                <span class="px-2 py-0.5 rounded-md bg-muted text-xs font-medium break-words min-w-0">{{ actionLabel(event.action) }}</span>
+                <span class="text-xs text-muted-foreground whitespace-nowrap shrink-0">{{ formatTime(event.created_at) }}</span>
+              </div>
+              <div class="mt-3 text-xs text-muted-foreground break-words">
+                <span class="font-medium text-foreground">{{ t('adminAudit.actor') }}：</span>{{ actorDisplay(event) }}
+              </div>
+              <div class="mt-2 text-xs text-muted-foreground break-words">
+                <span class="font-medium text-foreground">{{ t('adminUsers.uid') }}：</span>{{ uidDisplay(event) }}
+              </div>
+              <div class="mt-2 text-xs text-muted-foreground break-words">
+                <span class="font-medium text-foreground">{{ t('adminAudit.details') }}：</span>{{ formatDetails(event) }}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </template>

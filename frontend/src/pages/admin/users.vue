@@ -422,6 +422,12 @@ function statusLabel(status: string) {
   }
   return labels[status] || status
 }
+
+function roleLabel(role?: string) {
+  const key = `role.${role || 'user'}`
+  const translated = t(key)
+  return translated === key ? t('role.user') : translated
+}
 </script>
 
 <template>
@@ -490,8 +496,8 @@ function statusLabel(status: string) {
               </span>
             </td>
             <td class="px-4 py-3">
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="{ 'text-white bg-foreground': user.role === 'super_admin', 'text-foreground bg-foreground/10': user.role === 'admin', 'text-muted-foreground bg-muted': user.role === 'user' }">
-                {{ $t(`role.${user.role}`) }}
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="{ 'text-white bg-foreground': user.role === 'super_admin', 'text-foreground bg-foreground/10': user.role === 'admin', 'text-muted-foreground bg-muted': !user.role || user.role === 'user' }">
+                {{ roleLabel(user.role) }}
               </span>
             </td>
             <td class="px-4 py-3 text-muted-foreground">L{{ user.security_level }}</td>
@@ -579,7 +585,7 @@ function statusLabel(status: string) {
           <div><div class="text-muted-foreground">{{ $t('adminUsers.email') }}</div><div class="font-medium">{{ detailUser.email }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.name') }}</div><div class="font-medium">{{ detailUser.display_name || '-' }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.alias') }}</div><div class="font-medium">{{ detailUser.alias || '-' }}</div></div>
-          <div><div class="text-muted-foreground">{{ $t('adminUsers.role') }}</div><div class="font-medium">{{ $t(`role.${detailUser.role}`) }}</div></div>
+          <div><div class="text-muted-foreground">{{ $t('adminUsers.role') }}</div><div class="font-medium">{{ roleLabel(detailUser.role) }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.status') }}</div><div class="font-medium">{{ statusLabel(detailUser.status) }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.securityLevel') }}</div><div class="font-medium">L{{ detailUser.security_level }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.lastLogin') }}</div><div class="font-medium">{{ formatDate(detailUser.last_login_at) }}</div></div>

@@ -65,6 +65,7 @@ const actionOptions = [
   'security_level.downgraded',
   'risk.user_reported',
   'risk.enforcement',
+  'risk.list_added',
   'token_issue',
   'token_revoke',
 ]
@@ -174,7 +175,11 @@ function rawDetails(entry: AuditEntry): string {
 
 function actorDisplay(entry: AuditEntry): string {
   if (entry.user_email) return entry.user_email
-  if (entry.user_uid !== undefined && entry.user_uid !== null) return `UID ${entry.user_uid}`
+  return '-'
+}
+
+function uidDisplay(entry: AuditEntry): string {
+  if (entry.user_uid !== undefined && entry.user_uid !== null) return String(entry.user_uid)
   if (entry.user_id) return entry.user_id
   return '-'
 }
@@ -189,14 +194,14 @@ function actorDisplay(entry: AuditEntry): string {
       </div>
     </div>
 
-    <div class="flex items-center gap-3 mb-4">
-      <select v-model="actionFilter" class="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+      <select v-model="actionFilter" class="w-full sm:w-auto px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10">
         <option value="">{{ $t('adminAudit.allActions') }}</option>
         <option v-for="action in actionOptions" :key="action" :value="action">{{ formatAction(action) }}</option>
       </select>
-      <div class="relative">
+      <div class="relative w-full sm:w-64">
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-        <input v-model="userIdFilter" type="text" :placeholder="$t('adminAudit.filterByUser')" class="pl-9 pr-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10 w-64" />
+        <input v-model="userIdFilter" type="text" :placeholder="$t('adminAudit.filterByUser')" class="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
       </div>
     </div>
 
@@ -206,46 +211,66 @@ function actorDisplay(entry: AuditEntry): string {
       <Loader2 class="w-5 h-5 animate-spin mr-2" /> {{ $t('loading') }}
     </div>
 
-    <div v-else class="border border-border rounded-xl overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-muted/50 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          <tr>
-            <th class="px-4 py-3">{{ $t('adminAudit.time') }}</th>
-            <th class="px-4 py-3">{{ $t('adminAudit.actor') }}</th>
-            <th class="px-4 py-3">{{ $t('adminAudit.action') }}</th>
-            <th class="px-4 py-3">{{ $t('adminAudit.resourceType') }}</th>
-            <th class="px-4 py-3">{{ $t('adminAudit.details') }}</th>
-            <th class="px-4 py-3">{{ $t('adminAudit.ip') }}</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border">
-          <tr v-if="entries.length === 0">
-            <td colspan="6" class="px-4 py-8 text-center text-muted-foreground">{{ $t('adminAudit.noLogs') }}</td>
-          </tr>
-          <tr v-for="entry in entries" :key="entry.id" class="hover:bg-muted/30 transition-colors">
-            <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">{{ formatTimestamp(entry.created_at) }}</td>
-            <td class="px-4 py-3">
-              <div class="text-xs">
-                <span class="font-medium">{{ actorDisplay(entry) }}</span>
-                <div v-if="entry.user_email && (entry.user_uid || entry.user_id)" class="text-muted-foreground font-mono mt-0.5">
-                  {{ entry.user_uid ? `UID ${entry.user_uid}` : entry.user_id }}
+    <div v-else>
+      <div class="hidden md:block border border-border rounded-xl overflow-hidden">
+        <table class="w-full text-sm table-fixed">
+          <thead class="bg-muted/50 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <tr>
+              <th class="px-4 py-3 w-40">{{ $t('adminAudit.time') }}</th>
+              <th class="px-4 py-3 w-52">{{ $t('adminAudit.actor') }}</th>
+              <th class="px-4 py-3 w-32">{{ $t('adminUsers.uid') }}</th>
+              <th class="px-4 py-3 w-40">{{ $t('adminAudit.action') }}</th>
+              <th class="px-4 py-3 w-44">{{ $t('adminAudit.resourceType') }}</th>
+              <th class="px-4 py-3">{{ $t('adminAudit.details') }}</th>
+              <th class="px-4 py-3 w-32">{{ $t('adminAudit.ip') }}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            <tr v-if="entries.length === 0">
+              <td colspan="7" class="px-4 py-8 text-center text-muted-foreground">{{ $t('adminAudit.noLogs') }}</td>
+            </tr>
+            <tr v-for="entry in entries" :key="entry.id" class="hover:bg-muted/30 transition-colors">
+              <td class="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">{{ formatTimestamp(entry.created_at) }}</td>
+              <td class="px-4 py-3 min-w-0">
+                <div class="text-xs min-w-0">
+                  <div class="font-medium truncate" :title="actorDisplay(entry)">{{ actorDisplay(entry) }}</div>
                 </div>
-              </div>
-            </td>
-            <td class="px-4 py-3">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted">{{ formatAction(entry.action) }}</span>
-            </td>
-            <td class="px-4 py-3 text-muted-foreground text-xs">
-              {{ formatResource(entry.resource_type) }}
-              <div v-if="entry.resource_id" class="font-mono text-[11px] mt-0.5 truncate max-w-40" :title="entry.resource_id">
-                {{ entry.resource_id }}
-              </div>
-            </td>
-            <td class="px-4 py-3 text-muted-foreground text-xs max-w-80 truncate" :title="rawDetails(entry)">{{ formatDetails(entry) }}</td>
-            <td class="px-4 py-3 text-muted-foreground text-xs font-mono">{{ entry.ip_address || '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
+              </td>
+              <td class="px-4 py-3 text-muted-foreground text-xs font-mono truncate" :title="uidDisplay(entry)">{{ uidDisplay(entry) }}</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted max-w-full truncate">{{ formatAction(entry.action) }}</span>
+              </td>
+              <td class="px-4 py-3 text-muted-foreground text-xs min-w-0">
+                <div class="truncate">{{ formatResource(entry.resource_type) }}</div>
+                <div v-if="entry.resource_id" class="font-mono text-[11px] mt-0.5 truncate" :title="entry.resource_id">
+                  {{ entry.resource_id }}
+                </div>
+              </td>
+              <td class="px-4 py-3 text-muted-foreground text-xs truncate" :title="rawDetails(entry)">{{ formatDetails(entry) }}</td>
+              <td class="px-4 py-3 text-muted-foreground text-xs font-mono truncate">{{ entry.ip_address || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="md:hidden space-y-3">
+        <div v-if="entries.length === 0" class="border border-border rounded-xl px-4 py-8 text-center text-muted-foreground text-sm">
+          {{ $t('adminAudit.noLogs') }}
+        </div>
+        <div v-for="entry in entries" :key="entry.id" class="border border-border rounded-xl p-4 bg-background">
+          <div class="flex items-start justify-between gap-3">
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-muted break-words min-w-0">{{ formatAction(entry.action) }}</span>
+            <span class="text-xs text-muted-foreground whitespace-nowrap shrink-0">{{ formatTimestamp(entry.created_at) }}</span>
+          </div>
+          <div class="mt-3 space-y-2 text-xs text-muted-foreground">
+            <div class="break-words"><span class="font-medium text-foreground">{{ $t('adminAudit.actor') }}：</span>{{ actorDisplay(entry) }}</div>
+            <div class="break-words"><span class="font-medium text-foreground">{{ $t('adminUsers.uid') }}：</span>{{ uidDisplay(entry) }}</div>
+            <div class="break-words"><span class="font-medium text-foreground">{{ $t('adminAudit.resourceType') }}：</span>{{ formatResource(entry.resource_type) }}<span v-if="entry.resource_id"> / {{ entry.resource_id }}</span></div>
+            <div class="break-words"><span class="font-medium text-foreground">{{ $t('adminAudit.details') }}：</span>{{ formatDetails(entry) }}</div>
+            <div class="break-words"><span class="font-medium text-foreground">{{ $t('adminAudit.ip') }}：</span>{{ entry.ip_address || '-' }}</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div v-if="total > 0" class="flex items-center justify-between mt-4 text-sm text-muted-foreground">

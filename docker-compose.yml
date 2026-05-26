@@ -1,20 +1,18 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: oidc-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: oidc
-      POSTGRES_USER: oidc
-      POSTGRES_PASSWORD: oidc_secret
+      POSTGRES_DB: ${OIDC_DATABASE_NAME:-oidc}
+      POSTGRES_USER: ${OIDC_DATABASE_USER:-oidc}
+      POSTGRES_PASSWORD: ${OIDC_DATABASE_PASSWORD:-oidc_secret}
     ports:
-      - "5432:5432"
+      - "${OIDC_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oidc -d oidc"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -24,7 +22,7 @@ services:
     container_name: oidc-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${OIDC_REDIS_EXPOSE_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
@@ -46,14 +44,29 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8080:8080"
-    env_file:
-      - .env
+      - "${OIDC_SERVER_PORT:-8080}:8080"
     environment:
-      OIDC_DATABASE_HOST: postgres
+      OIDC_SERVER_HOST: "0.0.0.0"
+      OIDC_SERVER_PORT: "8080"
+      OIDC_SERVER_ISSUER: "${OIDC_SERVER_ISSUER:-http://localhost:8080}"
+      OIDC_SERVER_PUBLIC_URL: "${OIDC_SERVER_PUBLIC_URL:-http://localhost:8080}"
+      OIDC_DATABASE_DRIVER: "postgres"
+      OIDC_DATABASE_HOST: "postgres"
       OIDC_DATABASE_PORT: "5432"
-      OIDC_REDIS_HOST: redis
+      OIDC_DATABASE_USER: "${OIDC_DATABASE_USER:-oidc}"
+      OIDC_DATABASE_PASSWORD: "${OIDC_DATABASE_PASSWORD:-oidc_secret}"
+      OIDC_DATABASE_NAME: "${OIDC_DATABASE_NAME:-oidc}"
+      OIDC_DATABASE_SSLMODE: "disable"
+      OIDC_REDIS_HOST: "redis"
       OIDC_REDIS_PORT: "6379"
+      OIDC_REDIS_PASSWORD: "${OIDC_REDIS_PASSWORD:-}"
+      OIDC_REDIS_DB: "${OIDC_REDIS_DB:-0}"
+      OIDC_ADMIN_EMAIL: "${OIDC_ADMIN_EMAIL:-admin@example.com}"
+      OIDC_ADMIN_PASSWORD: "${OIDC_ADMIN_PASSWORD:-change_me_now}"
+      OIDC_SECRETS_CLIENT_SECRET_ENCRYPTION_KEY: "${OIDC_SECRETS_CLIENT_SECRET_ENCRYPTION_KEY:-dev-client-secret-encryption-key}"
+      OIDC_SESSION_COOKIE_SECURE: "${OIDC_SESSION_COOKIE_SECURE:-false}"
+      OIDC_LOG_LEVEL: "${OIDC_LOG_LEVEL:-info}"
+      OIDC_LOG_FORMAT: "${OIDC_LOG_FORMAT:-json}"
     volumes:
       - ./configs:/app/configs:ro
 

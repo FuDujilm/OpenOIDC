@@ -22,7 +22,7 @@ type Config struct {
 	SMS            SMSConfig
 	SMTP           SMTPConfig
 	Secrets        SecretsConfig
-	WebAuthn       WebAuthnConfig       `mapstructure:"webauthn"`
+	WebAuthn       WebAuthnConfig `mapstructure:"webauthn"`
 }
 
 type ServerConfig struct {
@@ -165,6 +165,7 @@ func Load() (*Config, error) {
 	v.AutomaticEnv()
 
 	setDefaults(v)
+	bindEnv(v)
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -194,6 +195,90 @@ func Load() (*Config, error) {
 	cfg.OAuth2.Providers = providers
 
 	return cfg, nil
+}
+
+func bindEnv(v *viper.Viper) {
+	keys := []string{
+		"server.host",
+		"server.port",
+		"server.issuer",
+		"server.public_url",
+		"server.read_timeout",
+		"server.write_timeout",
+		"server.shutdown_timeout",
+		"database.driver",
+		"database.dsn",
+		"database.host",
+		"database.port",
+		"database.user",
+		"database.password",
+		"database.name",
+		"database.sslmode",
+		"database.max_conns",
+		"database.min_conns",
+		"database.max_conn_lifetime",
+		"database.max_conn_idle_time",
+		"redis.host",
+		"redis.port",
+		"redis.password",
+		"redis.db",
+		"redis.pool_size",
+		"redis.min_idle_conns",
+		"jwt.algorithm",
+		"jwt.access_token_ttl",
+		"jwt.refresh_token_ttl",
+		"jwt.id_token_ttl",
+		"jwt.auth_code_ttl",
+		"jwt.key_rotation_days",
+		"session.cookie_name",
+		"session.cookie_domain",
+		"session.cookie_secure",
+		"session.cookie_http_only",
+		"session.cookie_same_site",
+		"session.ttl",
+		"admin.email",
+		"admin.password",
+		"log.level",
+		"log.format",
+		"security.password_min_length",
+		"security.password_require_upper",
+		"security.password_require_lower",
+		"security.password_require_digit",
+		"security.password_require_symbol",
+		"security.max_login_attempts",
+		"security.lockout_duration",
+		"security.bcrypt_cost",
+		"social_auth_sync.enabled",
+		"social_auth_sync.interval",
+		"social_auth_sync.batch_size",
+		"sms.provider",
+		"sms.access_key",
+		"sms.access_secret",
+		"sms.sign_name",
+		"sms.template_code",
+		"sms.code_ttl",
+		"sms.send_interval",
+		"sms.daily_limit",
+		"smtp.host",
+		"smtp.port",
+		"smtp.username",
+		"smtp.password",
+		"smtp.from",
+		"secrets.client_secret_encryption_key",
+		"webauthn.rp_id",
+		"webauthn.rp_origin",
+		"webauthn.rp_display_name",
+	}
+	providers := []string{"google", "github", "gitlab", "gitee", "linuxdo", "microsoft", "apple", "facebook", "twitter", "linkedin", "wechat", "qq", "weibo", "dingtalk", "discord", "telegram"}
+	providerFields := []string{"enabled", "client_id", "client_secret", "app_id", "app_secret", "app_key", "team_id", "key_id", "private_key", "tenant", "redirect_path"}
+	for _, provider := range providers {
+		for _, field := range providerFields {
+			keys = append(keys, "oauth2."+provider+"."+field)
+		}
+	}
+	for _, key := range keys {
+		_ = v.BindEnv(key)
+	}
 }
 
 func setDefaults(v *viper.Viper) {

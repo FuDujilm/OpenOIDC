@@ -313,6 +313,7 @@ func (s *SocialService) CompleteSocialLogin(ctx context.Context, provider string
 				EmailVerified: info.EmailVerified,
 				DisplayName:   displayName,
 				AvatarURL:     info.AvatarURL,
+				Role:          domain.RoleUser,
 				Status:        domain.UserStatusActive,
 				SecurityLevel: 0,
 				CreatedAt:     now,

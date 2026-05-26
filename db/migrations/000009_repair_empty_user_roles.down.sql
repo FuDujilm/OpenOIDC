@@ -1,0 +1,1 @@
+-- No-op: repaired empty user roles should remain valid.

@@ -26,9 +26,13 @@ const loading = ref(false)
 
 const { loading: passkeyLoading, error: passkeyError, loginWithPasskey } = usePasskey()
 
+function safeReturnTo(value: unknown) {
+  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/me'
+}
+
 async function handlePasskeyLogin() {
   error.value = ''
-  const returnTo = (route.query.return_to as string) || '/me'
+  const returnTo = safeReturnTo(route.query.return_to)
   const ok = await loginWithPasskey(returnTo)
   if (!ok && passkeyError.value && passkeyError.value !== 'cancelled') {
     error.value = passkeyError.value
@@ -46,12 +50,12 @@ onMounted(() => {
     router.replace({ path: route.path, query: { ...route.query, error: undefined } })
   }
   if (route.query.result === 'login_success') {
-    router.replace((route.query.return_to as string) || '/me')
+    router.replace(safeReturnTo(route.query.return_to))
   }
 })
 
 function socialLogin(provider: string) {
-  const returnTo = (route.query.return_to as string) || '/me'
+  const returnTo = safeReturnTo(route.query.return_to)
   window.location.href = `/api/v1/social/${provider}/begin?return_to=${encodeURIComponent(returnTo)}`
 }
 
@@ -60,7 +64,7 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(email.value, password.value, turnstileToken.value || undefined)
-    const returnTo = (route.query.return_to as string) || '/me'
+    const returnTo = safeReturnTo(route.query.return_to)
     router.push(returnTo)
   } catch (e: any) {
     const msg = e.message || 'Login failed. Please try again.'
