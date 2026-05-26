@@ -16,6 +16,15 @@ interface Setting {
   description: string
 }
 
+interface VersionCheckInfo {
+  current_version: string
+  latest_version: string
+  update_available: boolean
+  release_url: string
+  checked_at: string
+  source: string
+}
+
 const BOOL_SETTINGS = new Set([
   'registration_enabled',
   'registration_email_verification_required',
@@ -65,6 +74,8 @@ const settings = ref<Setting[]>([])
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
+const checkingVersion = ref(false)
+const versionCheck = ref<VersionCheckInfo | null>(null)
 
 const showModal = ref(false)
 const editingKey = ref('')
@@ -154,6 +165,19 @@ async function fetchSettings() {
     error.value = e.message
   } finally {
     loading.value = false
+  }
+}
+
+async function checkVersionUpdate() {
+  checkingVersion.value = true
+  error.value = ''
+  try {
+    const res = await api.get<VersionCheckInfo>('/admin/version/check')
+    versionCheck.value = res.data || null
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    checkingVersion.value = false
   }
 }
 
@@ -326,11 +350,31 @@ async function deleteAlias(id: string) {
 
     <template v-else>
       <div class="border border-border rounded-xl p-6 mb-8 bg-muted/20">
-        <h3 class="text-base font-semibold mb-2">{{ $t('adminSettings.versionTitle') }}</h3>
-        <p class="text-sm text-muted-foreground mb-4">{{ $t('adminSettings.versionDesc') }}</p>
-        <div class="flex items-center justify-between rounded-lg border border-border bg-white px-4 py-3">
-          <span class="text-sm text-muted-foreground">{{ $t('adminSettings.currentVersion') }}</span>
-          <code class="text-sm font-mono font-semibold">{{ publicConfigLoaded ? publicSettings.version : '1.0.0' }}</code>
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-base font-semibold mb-2">{{ $t('adminSettings.versionTitle') }}</h3>
+            <p class="text-sm text-muted-foreground">{{ $t('adminSettings.versionDesc') }}</p>
+          </div>
+          <button @click="checkVersionUpdate" :disabled="checkingVersion" class="px-4 py-2 rounded-full border border-border bg-white text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            <Loader2 v-if="checkingVersion" class="w-4 h-4 animate-spin" />
+            {{ checkingVersion ? $t('adminSettings.checkingUpdate') : $t('adminSettings.checkUpdate') }}
+          </button>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="flex items-center justify-between rounded-lg border border-border bg-white px-4 py-3">
+            <span class="text-sm text-muted-foreground">{{ $t('adminSettings.currentVersion') }}</span>
+            <code class="text-sm font-mono font-semibold">{{ publicConfigLoaded ? publicSettings.version : 'v1.10' }}</code>
+          </div>
+          <div v-if="versionCheck" class="flex items-center justify-between rounded-lg border border-border bg-white px-4 py-3">
+            <span class="text-sm text-muted-foreground">{{ $t('adminSettings.latestVersion') }}</span>
+            <code class="text-sm font-mono font-semibold">{{ versionCheck.latest_version }}</code>
+          </div>
+        </div>
+        <div v-if="versionCheck" class="mt-4 rounded-lg px-4 py-3 text-sm" :class="versionCheck.update_available ? 'border border-amber-200 bg-amber-50 text-amber-800' : 'border border-green-200 bg-green-50 text-green-700'">
+          <div class="font-medium">{{ versionCheck.update_available ? $t('adminSettings.updateAvailable') : $t('adminSettings.alreadyLatest') }}</div>
+          <a v-if="versionCheck.release_url" :href="versionCheck.release_url" target="_blank" rel="noreferrer" class="inline-flex mt-1 underline underline-offset-2">
+            {{ $t('adminSettings.releasePage') }}
+          </a>
         </div>
       </div>
 

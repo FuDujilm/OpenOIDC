@@ -188,6 +188,7 @@ func NewRouter(d Deps) *chi.Mux {
 
 			r.Get("/settings", d.AdminHandler.ListSettings)
 			r.Put("/settings/{key}", d.AdminHandler.UpdateSetting)
+			r.Get("/version/check", d.AdminHandler.CheckVersionUpdate)
 
 			r.Get("/audit-log", d.AdminHandler.ListAuditLogs)
 

@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -1360,6 +1362,106 @@ func (h *AdminHandler) UpdateSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	JSON(w, http.StatusOK, map[string]any{"updated": true})
+}
+
+type versionCheckResponse struct {
+	CurrentVersion  string    `json:"current_version"`
+	LatestVersion   string    `json:"latest_version"`
+	UpdateAvailable bool      `json:"update_available"`
+	ReleaseURL      string    `json:"release_url"`
+	CheckedAt       time.Time `json:"checked_at"`
+	Source          string    `json:"source"`
+}
+
+type githubReleaseResponse struct {
+	TagName string `json:"tag_name"`
+	HTMLURL string `json:"html_url"`
+}
+
+type githubTagResponse struct {
+	Name string `json:"name"`
+}
+
+func (h *AdminHandler) CheckVersionUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	latest, releaseURL, source, err := fetchLatestVersion(ctx)
+	if err != nil {
+		Error(w, http.StatusBadGateway, "update_check_failed", err.Error())
+		return
+	}
+
+	JSON(w, http.StatusOK, versionCheckResponse{
+		CurrentVersion:  version.Version,
+		LatestVersion:   latest,
+		UpdateAvailable: compareVersions(latest, version.Version) > 0,
+		ReleaseURL:      releaseURL,
+		CheckedAt:       time.Now().UTC(),
+		Source:          source,
+	})
+}
+
+func fetchLatestVersion(ctx context.Context) (string, string, string, error) {
+	var release githubReleaseResponse
+	if err := fetchGitHubJSON(ctx, "https://api.github.com/repos/Luotianyi-0712/OpenOIDC/releases/latest", &release); err == nil && release.TagName != "" {
+		return release.TagName, release.HTMLURL, "github_release", nil
+	}
+
+	var tags []githubTagResponse
+	if err := fetchGitHubJSON(ctx, "https://api.github.com/repos/Luotianyi-0712/OpenOIDC/tags?per_page=1", &tags); err != nil {
+		return "", "", "", err
+	}
+	if len(tags) == 0 || strings.TrimSpace(tags[0].Name) == "" {
+		return "", "", "", fmt.Errorf("no release or tag found")
+	}
+	return tags[0].Name, "https://github.com/Luotianyi-0712/OpenOIDC/releases/tag/" + tags[0].Name, "github_tag", nil
+}
+
+func fetchGitHubJSON(ctx context.Context, url string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "OpenOIDC/"+version.Version)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("github returned %s", resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func compareVersions(a, b string) int {
+	as := parseVersionParts(a)
+	bs := parseVersionParts(b)
+	for i := 0; i < 3; i++ {
+		if as[i] > bs[i] {
+			return 1
+		}
+		if as[i] < bs[i] {
+			return -1
+		}
+	}
+	return 0
+}
+
+func parseVersionParts(v string) [3]int {
+	v = strings.TrimSpace(strings.TrimPrefix(v, "v"))
+	if idx := strings.IndexAny(v, "-+"); idx >= 0 {
+		v = v[:idx]
+	}
+	parts := strings.Split(v, ".")
+	var result [3]int
+	for i := 0; i < len(parts) && i < 3; i++ {
+		result[i], _ = strconv.Atoi(parts[i])
+	}
+	return result
 }
 
 // ---------------- Audit logs ----------------
