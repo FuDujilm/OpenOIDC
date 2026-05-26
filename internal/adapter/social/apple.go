@@ -159,14 +159,37 @@ func (p *AppleProvider) CompleteAuth(ctx context.Context, r *http.Request) (*por
 		"id_token":      tokenResp.IDToken,
 		"refresh_token": tokenResp.RefreshToken,
 	}
+	if emailVerified, ok := appleEmailVerified(claims.EmailVerified); ok {
+		raw["email_verified"] = emailVerified
+	}
+	raw = normalizeRawProfile(raw, email)
 
 	return &port.ProviderUserInfo{
-		ProviderUID: claims.Sub,
-		Email:       email,
-		DisplayName: displayName,
-		RawProfile:  raw,
-		Token:       appleTokenInfo(tokenResp),
+		ProviderUID:   claims.Sub,
+		Email:         email,
+		EmailVerified: raw["email_verified"] == true,
+		DisplayName:   displayName,
+		RawProfile:    raw,
+		Token:         appleTokenInfo(tokenResp),
 	}, nil
+}
+
+func appleEmailVerified(value any) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes":
+			return true, true
+		case "false", "0", "no":
+			return false, true
+		default:
+			return false, false
+		}
+	default:
+		return false, false
+	}
 }
 
 func (p *AppleProvider) SupportsRefresh() bool { return true }

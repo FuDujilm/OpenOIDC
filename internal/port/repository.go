@@ -19,6 +19,7 @@ type ListUsersOptions struct {
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	GetByUID(ctx context.Context, uid int64) (*domain.User, error)
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetByAlias(ctx context.Context, alias string) (*domain.User, error)
 	Update(ctx context.Context, user *domain.User) error

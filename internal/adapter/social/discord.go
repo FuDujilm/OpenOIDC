@@ -52,12 +52,18 @@ func NewDiscordProvider(clientID, clientSecret string) *OAuth2Provider {
 			}
 			var raw map[string]any
 			_ = json.Unmarshal(body, &raw)
+			if raw == nil {
+				raw = map[string]any{}
+			}
+			raw["email_verified"] = u.Verified
+			raw = normalizeRawProfile(raw, u.Email)
 			return &port.ProviderUserInfo{
-				ProviderUID: u.ID,
-				Email:       u.Email,
-				DisplayName: display,
-				AvatarURL:   avatar,
-				RawProfile:  raw,
+				ProviderUID:   u.ID,
+				Email:         u.Email,
+				EmailVerified: u.Verified,
+				DisplayName:   display,
+				AvatarURL:     avatar,
+				RawProfile:    raw,
 			}, nil
 		},
 	}

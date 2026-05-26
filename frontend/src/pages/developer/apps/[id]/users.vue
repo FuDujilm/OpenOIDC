@@ -18,7 +18,8 @@ interface AppDetail {
 }
 
 interface AppUserSummary {
-  uid: string
+  id: string
+  uid: number
   display_name: string
   email: string
   security_level: number
@@ -36,7 +37,7 @@ const limit = ref(20)
 const search = ref('')
 const loading = ref(false)
 const error = ref('')
-const actionUid = ref('')
+const actionUserId = ref('')
 
 const reportDialog = ref(false)
 const reportUser = ref<AppUserSummary | null>(null)
@@ -107,29 +108,29 @@ async function refreshUsers() {
 
 async function blockUser(user: AppUserSummary) {
   if (!window.confirm(t('developerApp.blockConfirm', { uid: user.uid }))) return
-  actionUid.value = user.uid
+  actionUserId.value = user.id
   try {
-    await api.post(`/developer/apps/${appId}/users/${user.uid}/block`)
+    await api.post(`/developer/apps/${appId}/users/${user.id}/block`)
     user.blocked = true
     toast.success(t('developerApp.blockSuccess'))
   } catch (e: any) {
     toast.error(e.message)
   } finally {
-    actionUid.value = ''
+    actionUserId.value = ''
   }
 }
 
 async function unblockUser(user: AppUserSummary) {
   if (!window.confirm(t('developerApp.unblockConfirm', { uid: user.uid }))) return
-  actionUid.value = user.uid
+  actionUserId.value = user.id
   try {
-    await api.del(`/developer/apps/${appId}/users/${user.uid}/block`)
+    await api.del(`/developer/apps/${appId}/users/${user.id}/block`)
     user.blocked = false
     toast.success(t('developerApp.unblockSuccess'))
   } catch (e: any) {
     toast.error(e.message)
   } finally {
-    actionUid.value = ''
+    actionUserId.value = ''
   }
 }
 
@@ -143,7 +144,7 @@ async function submitReport() {
   if (!reportUser.value || !reportForm.value.reason.trim()) return
   reporting.value = true
   try {
-    await api.post(`/developer/apps/${appId}/users/${reportUser.value.uid}/report`, {
+    await api.post(`/developer/apps/${appId}/users/${reportUser.value.id}/report`, {
       category: reportForm.value.category,
       reason: reportForm.value.reason.trim(),
     })
@@ -236,7 +237,7 @@ function categoryLabel(category: string) {
                 {{ $t('developerApp.noUsers') }}
               </td>
             </tr>
-            <tr v-for="user in users" :key="user.uid" class="hover:bg-muted/30 transition-colors">
+            <tr v-for="user in users" :key="user.id" class="hover:bg-muted/30 transition-colors">
               <td class="px-4 py-3 align-top">
                 <code class="text-xs font-mono break-all">{{ user.uid }}</code>
               </td>
@@ -275,19 +276,19 @@ function categoryLabel(category: string) {
                   <button
                     v-if="user.blocked"
                     @click="unblockUser(user)"
-                    :disabled="actionUid === user.uid"
+                    :disabled="actionUserId === user.id"
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
                   >
-                    <Loader2 v-if="actionUid === user.uid" class="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 v-if="actionUserId === user.id" class="w-3.5 h-3.5 animate-spin" />
                     {{ $t('developerApp.unblock') }}
                   </button>
                   <button
                     v-else
                     @click="blockUser(user)"
-                    :disabled="actionUid === user.uid"
+                    :disabled="actionUserId === user.id"
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-destructive/30 text-destructive rounded-lg text-xs font-medium hover:bg-destructive/5 transition-colors disabled:opacity-50"
                   >
-                    <Loader2 v-if="actionUid === user.uid" class="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 v-if="actionUserId === user.id" class="w-3.5 h-3.5 animate-spin" />
                     {{ $t('developerApp.block') }}
                   </button>
                 </div>

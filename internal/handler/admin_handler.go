@@ -1128,6 +1128,7 @@ func (h *AdminHandler) PublicSettings(w http.ResponseWriter, r *http.Request) {
 		"password_login_enabled",
 		"social_login_enabled",
 		"social_register_enabled",
+		"social_binding_enabled",
 		"turnstile_site_key",
 		"developer_min_trust_level",
 	}
@@ -1479,6 +1480,7 @@ func (h *AdminHandler) auditPayload(ctx context.Context, log *domain.AuditLog) m
 	}
 	if log.UserID != nil {
 		if user, err := h.userRepo.GetByID(ctx, *log.UserID); err == nil {
+			payload["user_uid"] = user.UID
 			payload["user_email"] = user.Email
 			payload["user_display_name"] = user.DisplayName
 		}
@@ -1512,6 +1514,7 @@ func (h *AdminHandler) clientPayload(ctx context.Context, c *domain.OIDCClient) 
 	}
 	if c.OwnerUserID != nil {
 		if owner, err := h.userRepo.GetByID(ctx, *c.OwnerUserID); err == nil {
+			payload["owner_uid"] = owner.UID
 			payload["owner_email"] = owner.Email
 			payload["owner_display_name"] = owner.DisplayName
 		}

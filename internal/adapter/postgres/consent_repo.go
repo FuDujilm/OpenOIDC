@@ -89,7 +89,7 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 		AND oa.subject != ''
 		AND (oa.expires_at IS NULL OR oa.expires_at > NOW())
 		AND u.deleted_at IS NULL
-		AND ($2 = '' OR u.id::text ILIKE $3 OR u.email ILIKE $3 OR u.display_name ILIKE $3)`
+		AND ($2 = '' OR u.id::text ILIKE $3 OR u.uid::text ILIKE $3 OR u.email ILIKE $3 OR u.display_name ILIKE $3)`
 
 	var total int64
 	if err := r.db.QueryRow(ctx,
@@ -103,7 +103,7 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 	}
 
 	rows, err := r.db.Query(ctx,
-		`SELECT u.id, u.display_name, u.email, u.security_level,
+		`SELECT u.id, u.uid, u.display_name, u.email, u.security_level,
 		        COALESCE(array_remove(array_agg(DISTINCT sb.provider), NULL), ARRAY[]::text[]) AS providers,
 		        BOOL_OR(car.id IS NOT NULL) AS blocked,
 		        MIN(oa.created_at) AS granted_at,
@@ -113,7 +113,7 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 		 LEFT JOIN social_bindings sb ON sb.user_id = u.id AND sb.status = 'active'
 		 LEFT JOIN client_access_rules car ON car.client_id = $4 AND car.rule_type = $5 AND car.rule_value = u.id::text
 		 WHERE `+where+`
-		 GROUP BY u.id, u.display_name, u.email, u.security_level
+		 GROUP BY u.id, u.uid, u.display_name, u.email, u.security_level
 		 ORDER BY last_used_at DESC
 		 LIMIT $6 OFFSET $7`,
 		client.ClientID, search, pattern, client.ID, string(domain.AccessRuleUserDeny), limit, offset,
@@ -126,7 +126,7 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 	users := make([]*domain.DeveloperAppUserSummary, 0)
 	for rows.Next() {
 		item := &domain.DeveloperAppUserSummary{}
-		if err := rows.Scan(&item.UID, &item.DisplayName, &item.Email, &item.SecurityLevel, &item.Providers, &item.Blocked, &item.GrantedAt, &item.LastUsedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UID, &item.DisplayName, &item.Email, &item.SecurityLevel, &item.Providers, &item.Blocked, &item.GrantedAt, &item.LastUsedAt); err != nil {
 			return nil, 0, err
 		}
 		if item.Providers == nil {

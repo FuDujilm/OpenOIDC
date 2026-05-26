@@ -308,6 +308,7 @@ func (h *UserInfoHandler) RevokeAuthorizedApp(w http.ResponseWriter, r *http.Req
 func userPayload(u *domain.User) map[string]any {
 	return map[string]any{
 		"id":             u.ID,
+		"uid":            u.UID,
 		"email":          u.Email,
 		"email_verified": u.EmailVerified,
 		"display_name":   u.DisplayName,

@@ -23,6 +23,7 @@ const (
 
 type User struct {
 	ID            uuid.UUID  `json:"id"`
+	UID           int64      `json:"uid"`
 	Email         string     `json:"email"`
 	EmailVerified bool       `json:"email_verified"`
 	PasswordHash  string     `json:"-"`

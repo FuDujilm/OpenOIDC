@@ -74,6 +74,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	JSON(w, http.StatusCreated, map[string]any{
 		"id":             user.ID,
+		"uid":            user.UID,
 		"email":          user.Email,
 		"display_name":   user.DisplayName,
 		"email_verified": user.EmailVerified,

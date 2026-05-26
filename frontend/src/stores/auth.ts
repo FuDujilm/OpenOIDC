@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 
 export interface User {
   id: string
+  uid: number
   email: string
   email_verified: boolean
   display_name: string

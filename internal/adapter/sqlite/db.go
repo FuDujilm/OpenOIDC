@@ -50,6 +50,7 @@ func RunMigrations(db *sql.DB) error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS users (
 		id TEXT PRIMARY KEY,
+		uid INTEGER NOT NULL UNIQUE,
 		email TEXT UNIQUE NOT NULL,
 		email_verified BOOLEAN NOT NULL DEFAULT 0,
 		password_hash TEXT NOT NULL DEFAULT '',
@@ -63,6 +64,11 @@ func RunMigrations(db *sql.DB) error {
 		deleted_at DATETIME,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS user_uid_sequence (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		next_uid INTEGER NOT NULL
 	);
 
 	CREATE TABLE IF NOT EXISTS social_bindings (
@@ -268,6 +274,7 @@ func RunMigrations(db *sql.DB) error {
 
 	// Add columns for existing databases (idempotent).
 	alterStmts := []string{
+		`ALTER TABLE users ADD COLUMN uid INTEGER`,
 		`ALTER TABLE oidc_clients ADD COLUMN client_secret_encrypted TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE oidc_clients ADD COLUMN homepage_url TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE oidc_clients ADD COLUMN post_logout_redirect_uris TEXT NOT NULL DEFAULT '[]'`,
@@ -289,11 +296,19 @@ func RunMigrations(db *sql.DB) error {
 		db.Exec(stmt) // ignore "duplicate column" errors
 	}
 
+	if err := migrateUserUIDs(db); err != nil {
+		return err
+	}
+	if err := syncUserUIDSequence(db); err != nil {
+		return err
+	}
+
 	if err := migrateSocialBindingsLifecycle(db); err != nil {
 		return err
 	}
 
 	indexStmts := []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)`,
 		`CREATE INDEX IF NOT EXISTS idx_oauth2_sessions_subject ON oauth2_sessions(subject)`,
 		`CREATE INDEX IF NOT EXISTS idx_oauth2_sessions_type_active ON oauth2_sessions(session_type, active)`,
 		`CREATE INDEX IF NOT EXISTS idx_oauth2_sessions_client_active ON oauth2_sessions(client_id, active)`,
@@ -308,6 +323,56 @@ func RunMigrations(db *sql.DB) error {
 		db.Exec(stmt)
 	}
 
+	return nil
+}
+
+func migrateUserUIDs(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin user uid migration: %w", err)
+	}
+	defer tx.Rollback()
+
+	var nextUID int64
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(uid), 0) + 1 FROM users WHERE uid IS NOT NULL`).Scan(&nextUID); err != nil {
+		return fmt.Errorf("get next user uid: %w", err)
+	}
+
+	rows, err := tx.Query(`SELECT id FROM users WHERE uid IS NULL ORDER BY created_at, id`)
+	if err != nil {
+		return fmt.Errorf("list users missing uid: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan user missing uid: %w", err)
+		}
+		if _, err := tx.Exec(`UPDATE users SET uid = ? WHERE id = ?`, nextUID, id); err != nil {
+			return fmt.Errorf("assign user uid: %w", err)
+		}
+		nextUID++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate users missing uid: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit user uid migration: %w", err)
+	}
+	return nil
+}
+
+func syncUserUIDSequence(db *sql.DB) error {
+	_, err := db.Exec(`
+		INSERT INTO user_uid_sequence (id, next_uid)
+		VALUES (1, (SELECT COALESCE(MAX(uid), 0) + 1 FROM users))
+		ON CONFLICT(id) DO UPDATE SET
+			next_uid = MAX(user_uid_sequence.next_uid, excluded.next_uid)
+	`)
+	if err != nil {
+		return fmt.Errorf("sync user uid sequence: %w", err)
+	}
 	return nil
 }
 

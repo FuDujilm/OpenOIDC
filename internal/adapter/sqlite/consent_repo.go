@@ -90,7 +90,7 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 		AND os.subject != ''
 		AND (os.expires_at IS NULL OR os.expires_at > datetime('now'))
 		AND u.deleted_at IS NULL
-		AND (? = '' OR u.id LIKE ? OR u.email LIKE ? OR u.display_name LIKE ?)`
+		AND (? = '' OR u.id LIKE ? OR CAST(u.uid AS TEXT) LIKE ? OR u.email LIKE ? OR u.display_name LIKE ?)`
 
 	var total int64
 	if err := r.db.QueryRowContext(ctx,
@@ -98,13 +98,13 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 		 FROM oauth2_sessions os
 		 JOIN users u ON u.id = os.subject
 		 WHERE `+where,
-		client.ClientID, search, pattern, pattern, pattern,
+		client.ClientID, search, pattern, pattern, pattern, pattern,
 	).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT u.id, u.display_name, u.email, u.security_level,
+		`SELECT u.id, u.uid, u.display_name, u.email, u.security_level,
 		        COALESCE(GROUP_CONCAT(DISTINCT sb.provider), '') AS providers,
 		        MAX(CASE WHEN car.id IS NULL THEN 0 ELSE 1 END) AS blocked,
 		        MIN(os.created_at) AS granted_at,
@@ -114,10 +114,10 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 		 LEFT JOIN social_bindings sb ON sb.user_id = u.id AND sb.status = 'active'
 		 LEFT JOIN client_access_rules car ON car.client_id = ? AND car.rule_type = ? AND car.value = u.id
 		 WHERE `+where+`
-		 GROUP BY u.id, u.display_name, u.email, u.security_level
+		 GROUP BY u.id, u.uid, u.display_name, u.email, u.security_level
 		 ORDER BY last_used_at DESC
 		 LIMIT ? OFFSET ?`,
-		client.ID.String(), string(domain.AccessRuleUserDeny), client.ClientID, search, pattern, pattern, pattern, limit, offset,
+		client.ID.String(), string(domain.AccessRuleUserDeny), client.ClientID, search, pattern, pattern, pattern, pattern, limit, offset,
 	)
 	if err != nil {
 		return nil, 0, err
@@ -126,19 +126,19 @@ func (r *ConsentRepo) ListClientUsers(ctx context.Context, client *domain.OIDCCl
 
 	users := make([]*domain.DeveloperAppUserSummary, 0)
 	for rows.Next() {
-		var uid string
+		var id string
 		var providers string
 		var blocked int
 		var grantedAt, lastUsedAt sql.NullTime
 		item := &domain.DeveloperAppUserSummary{}
-		if err := rows.Scan(&uid, &item.DisplayName, &item.Email, &item.SecurityLevel, &providers, &blocked, &grantedAt, &lastUsedAt); err != nil {
+		if err := rows.Scan(&id, &item.UID, &item.DisplayName, &item.Email, &item.SecurityLevel, &providers, &blocked, &grantedAt, &lastUsedAt); err != nil {
 			return nil, 0, err
 		}
-		parsedUID, err := uuid.Parse(uid)
+		parsedID, err := uuid.Parse(id)
 		if err != nil {
 			continue
 		}
-		item.UID = parsedUID
+		item.ID = parsedID
 		if providers != "" {
 			item.Providers = strings.Split(providers, ",")
 		} else {

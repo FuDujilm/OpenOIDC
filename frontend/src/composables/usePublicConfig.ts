@@ -4,6 +4,8 @@ import { api } from '@/api/client'
 export interface EnabledProvider {
   name: string
   display_name: string
+  type?: string
+  icon_url?: string
 }
 
 export interface PublicSettings {
@@ -12,6 +14,7 @@ export interface PublicSettings {
   password_login_enabled: boolean
   social_login_enabled: boolean
   social_register_enabled: boolean
+  social_binding_enabled: boolean
   turnstile_site_key: string
   developer_min_trust_level: number
   passkey_enabled: boolean
@@ -85,6 +88,7 @@ export function usePublicConfig() {
     password_login_enabled: true,
     social_login_enabled: true,
     social_register_enabled: true,
+    social_binding_enabled: true,
     turnstile_site_key: '',
     developer_min_trust_level: 1,
     passkey_enabled: true,
@@ -106,6 +110,7 @@ export function usePublicConfig() {
           password_login_enabled: d.password_login_enabled !== 'false',
           social_login_enabled: d.social_login_enabled !== 'false',
           social_register_enabled: d.social_register_enabled !== 'false',
+          social_binding_enabled: d.social_binding_enabled !== 'false',
           turnstile_site_key: d.turnstile_site_key || '',
           developer_min_trust_level: parseInt(d.developer_min_trust_level) || 1,
           passkey_enabled: d.passkey_enabled !== 'false',

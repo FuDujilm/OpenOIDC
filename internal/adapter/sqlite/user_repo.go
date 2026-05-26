@@ -21,7 +21,7 @@ func NewUserRepo(db *sql.DB) *UserRepo {
 	return &UserRepo{db: db}
 }
 
-const userSelectColumns = `id, email, email_verified, password_hash, display_name, alias,
+const userSelectColumns = `id, uid, email, email_verified, password_hash, display_name, alias,
 	avatar_url, security_level, role, status, last_login_at, created_at, updated_at`
 
 func scanUser(row interface{ Scan(dest ...any) error }) (*domain.User, error) {
@@ -32,7 +32,7 @@ func scanUser(row interface{ Scan(dest ...any) error }) (*domain.User, error) {
 	var status string
 
 	err := row.Scan(
-		&id, &u.Email, &u.EmailVerified, &u.PasswordHash, &u.DisplayName, &alias,
+		&id, &u.UID, &u.Email, &u.EmailVerified, &u.PasswordHash, &u.DisplayName, &alias,
 		&u.AvatarURL, &u.SecurityLevel, &u.Role, &status, &lastLogin,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -57,18 +57,30 @@ func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
 	}
 	u.UpdatedAt = now
 
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin user create: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := tx.QueryRowContext(ctx, `UPDATE user_uid_sequence SET next_uid = next_uid + 1 WHERE id = 1 RETURNING next_uid - 1`).Scan(&u.UID); err != nil {
+		return fmt.Errorf("allocate user uid: %w", err)
+	}
+
 	query := `
 		INSERT INTO users (
-			id, email, email_verified, password_hash, display_name, alias,
+			id, uid, email, email_verified, password_hash, display_name, alias,
 			avatar_url, security_level, role, status, created_at, updated_at
-		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err := r.db.ExecContext(ctx, query,
-		u.ID.String(), u.Email, u.EmailVerified, u.PasswordHash, u.DisplayName, toNullString(u.Alias),
+	if _, err := tx.ExecContext(ctx, query,
+		u.ID.String(), u.UID, u.Email, u.EmailVerified, u.PasswordHash, u.DisplayName, toNullString(u.Alias),
 		u.AvatarURL, u.SecurityLevel, u.Role, string(u.Status), u.CreatedAt, u.UpdatedAt,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("insert user: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit user create: %w", err)
 	}
 	return nil
 }
@@ -76,6 +88,19 @@ func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `SELECT ` + userSelectColumns + ` FROM users WHERE id = ? AND deleted_at IS NULL`
 	row := r.db.QueryRowContext(ctx, query, id.String())
+	u, err := scanUser(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, port.ErrNotFound
+		}
+		return nil, err
+	}
+	return u, nil
+}
+
+func (r *UserRepo) GetByUID(ctx context.Context, uid int64) (*domain.User, error) {
+	query := `SELECT ` + userSelectColumns + ` FROM users WHERE uid = ? AND deleted_at IS NULL`
+	row := r.db.QueryRowContext(ctx, query, uid)
 	u, err := scanUser(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -172,8 +197,8 @@ func (r *UserRepo) List(ctx context.Context, opts port.ListUsersOptions) ([]*dom
 
 	if opts.Search != "" {
 		pattern := "%" + opts.Search + "%"
-		args = append(args, pattern, pattern, pattern)
-		where = append(where, "(id LIKE ? OR email LIKE ? OR display_name LIKE ?)")
+		args = append(args, pattern, pattern, pattern, pattern)
+		where = append(where, "(id LIKE ? OR CAST(uid AS TEXT) LIKE ? OR email LIKE ? OR display_name LIKE ?)")
 	}
 	if opts.Status != nil {
 		args = append(args, string(*opts.Status))

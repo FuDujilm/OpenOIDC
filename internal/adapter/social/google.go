@@ -12,10 +12,13 @@ import (
 )
 
 type googleUser struct {
-	ID      string `json:"id"`
-	Email   string `json:"email"`
-	Name    string `json:"name"`
-	Picture string `json:"picture"`
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	VerifiedEmail bool   `json:"verified_email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+	HostedDomain  string `json:"hd"`
 }
 
 func NewGoogleProvider(clientID, clientSecret string) *OAuth2Provider {
@@ -38,12 +41,19 @@ func NewGoogleProvider(clientID, clientSecret string) *OAuth2Provider {
 			}
 			var raw map[string]any
 			_ = json.Unmarshal(body, &raw)
+			if raw == nil {
+				raw = map[string]any{}
+			}
+			emailVerified := u.EmailVerified || u.VerifiedEmail
+			raw["email_verified"] = emailVerified
+			raw = normalizeRawProfile(raw, u.Email)
 			return &port.ProviderUserInfo{
-				ProviderUID: u.ID,
-				Email:       u.Email,
-				DisplayName: u.Name,
-				AvatarURL:   u.Picture,
-				RawProfile:  raw,
+				ProviderUID:   u.ID,
+				Email:         u.Email,
+				EmailVerified: emailVerified,
+				DisplayName:   u.Name,
+				AvatarURL:     u.Picture,
+				RawProfile:    raw,
 			}, nil
 		},
 	}

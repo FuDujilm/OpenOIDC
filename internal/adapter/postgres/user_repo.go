@@ -38,16 +38,16 @@ func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
 			id, email, email_verified, password_hash, display_name, alias,
 			avatar_url, security_level, role, status, created_at, updated_at
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		RETURNING uid
 	`
 	var alias sql.NullString
 	if u.Alias != nil {
 		alias = sql.NullString{String: *u.Alias, Valid: true}
 	}
-	_, err := r.db.Exec(ctx, query,
+	if err := r.db.QueryRow(ctx, query,
 		u.ID, u.Email, u.EmailVerified, u.PasswordHash, u.DisplayName, alias,
 		u.AvatarURL, u.SecurityLevel, u.Role, string(u.Status), u.CreatedAt, u.UpdatedAt,
-	)
-	if err != nil {
+	).Scan(&u.UID); err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}
 	return nil
@@ -59,7 +59,7 @@ func scanUser(row pgx.Row) (*domain.User, error) {
 	var lastLogin sql.NullTime
 	var status string
 	err := row.Scan(
-		&u.ID, &u.Email, &u.EmailVerified, &u.PasswordHash, &u.DisplayName, &alias,
+		&u.ID, &u.UID, &u.Email, &u.EmailVerified, &u.PasswordHash, &u.DisplayName, &alias,
 		&u.AvatarURL, &u.SecurityLevel, &u.Role, &status, &lastLogin,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -76,12 +76,25 @@ func scanUser(row pgx.Row) (*domain.User, error) {
 	return &u, nil
 }
 
-const userSelectColumns = `id, email, email_verified, password_hash, display_name, alias,
+const userSelectColumns = `id, uid, email, email_verified, password_hash, display_name, alias,
 	avatar_url, security_level, role, status, last_login_at, created_at, updated_at`
 
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `SELECT ` + userSelectColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
 	row := r.db.QueryRow(ctx, query, id)
+	u, err := scanUser(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, port.ErrNotFound
+		}
+		return nil, err
+	}
+	return u, nil
+}
+
+func (r *UserRepo) GetByUID(ctx context.Context, uid int64) (*domain.User, error) {
+	query := `SELECT ` + userSelectColumns + ` FROM users WHERE uid = $1 AND deleted_at IS NULL`
+	row := r.db.QueryRow(ctx, query, uid)
 	u, err := scanUser(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -174,7 +187,7 @@ func (r *UserRepo) List(ctx context.Context, opts port.ListUsersOptions) ([]*dom
 
 	if opts.Search != "" {
 		args = append(args, "%"+opts.Search+"%")
-		where = append(where, fmt.Sprintf("(id::text ILIKE $%d OR email ILIKE $%d OR display_name ILIKE $%d)", len(args), len(args), len(args)))
+		where = append(where, fmt.Sprintf("(id::text ILIKE $%d OR uid::text ILIKE $%d OR email ILIKE $%d OR display_name ILIKE $%d)", len(args), len(args), len(args), len(args)))
 	}
 	if opts.Status != nil {
 		args = append(args, string(*opts.Status))

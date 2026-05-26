@@ -51,7 +51,8 @@ type ClientAccessRule struct {
 }
 
 type DeveloperAppUserSummary struct {
-	UID           uuid.UUID `json:"uid"`
+	ID            uuid.UUID `json:"id"`
+	UID           int64     `json:"uid"`
 	DisplayName   string    `json:"display_name"`
 	Email         string    `json:"email"`
 	SecurityLevel int       `json:"security_level"`

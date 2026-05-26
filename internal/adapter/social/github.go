@@ -15,11 +15,16 @@ import (
 )
 
 type githubUser struct {
-	ID        int64  `json:"id"`
-	Login     string `json:"login"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	AvatarURL string `json:"avatar_url"`
+	ID          int64  `json:"id"`
+	Login       string `json:"login"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	AvatarURL   string `json:"avatar_url"`
+	CreatedAt   string `json:"created_at"`
+	Followers   int    `json:"followers"`
+	Following   int    `json:"following"`
+	PublicRepos int    `json:"public_repos"`
+	PublicGists int    `json:"public_gists"`
 }
 
 type githubEmail struct {
@@ -53,23 +58,34 @@ func fetchGitHubUser(ctx context.Context, client *http.Client, _ *oauth2.Token) 
 	}
 
 	email := u.Email
-	if email == "" {
-		emailsBody, err := doGet(ctx, client, "https://api.github.com/user/emails")
-		if err == nil {
-			var emails []githubEmail
-			if err := json.Unmarshal(emailsBody, &emails); err == nil {
+	emailVerified := false
+	emailVerificationKnown := false
+	emailsBody, err := doGet(ctx, client, "https://api.github.com/user/emails")
+	if err == nil {
+		var emails []githubEmail
+		if err := json.Unmarshal(emailsBody, &emails); err == nil {
+			emailVerificationKnown = true
+			for _, e := range emails {
+				if e.Primary && e.Verified {
+					email = e.Email
+					emailVerified = true
+					break
+				}
+			}
+			if email == "" {
 				for _, e := range emails {
-					if e.Primary && e.Verified {
+					if e.Verified {
 						email = e.Email
+						emailVerified = true
 						break
 					}
 				}
-				if email == "" {
-					for _, e := range emails {
-						if e.Verified {
-							email = e.Email
-							break
-						}
+			}
+			if email != "" && !emailVerified {
+				for _, e := range emails {
+					if e.Email == email && e.Verified {
+						emailVerified = true
+						break
 					}
 				}
 			}
@@ -83,11 +99,19 @@ func fetchGitHubUser(ctx context.Context, client *http.Client, _ *oauth2.Token) 
 
 	var raw map[string]any
 	_ = json.Unmarshal(body, &raw)
+	if raw == nil {
+		raw = map[string]any{}
+	}
+	if emailVerificationKnown {
+		raw["email_verified"] = emailVerified
+		raw["primary_email_verified"] = emailVerified
+	}
+	raw = normalizeRawProfile(raw, email)
 
 	return &port.ProviderUserInfo{
 		ProviderUID:   strconv.FormatInt(u.ID, 10),
 		Email:         email,
-		EmailVerified: email != "",
+		EmailVerified: emailVerified,
 		DisplayName:   display,
 		AvatarURL:     u.AvatarURL,
 		RawProfile:    raw,

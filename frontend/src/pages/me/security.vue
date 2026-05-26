@@ -38,7 +38,10 @@ const info = ref<LevelInfo | null>(null)
 const loading = ref(true)
 const error = ref('')
 
-onMounted(fetchSecurity)
+onMounted(() => {
+  fetchSecurity()
+  fetchDeveloperAccess()
+})
 
 async function fetchSecurity() {
   loading.value = true
@@ -51,6 +54,13 @@ async function fetchSecurity() {
   } finally {
     loading.value = false
   }
+}
+
+async function fetchDeveloperAccess() {
+  if (!auth.user) {
+    await auth.fetchUser()
+  }
+  await auth.fetchDeveloperStatus()
 }
 
 const maxLevel = computed(() => info.value?.max_level || 1)
@@ -89,6 +99,19 @@ const levelLabel = computed(() => {
   if (p >= 80) return t('security.strong')
   if (p >= 40) return t('security.moderate')
   return t('security.weak')
+})
+
+const developerMinLevel = computed(() => auth.developerStatus?.min_trust_level ?? auth.developerMinTrustLevel ?? 1)
+const developerCurrentLevel = computed(() => auth.developerStatus?.current_trust_level ?? info.value?.level ?? auth.user?.security_level ?? 0)
+const developerLevelGap = computed(() => Math.max(0, developerMinLevel.value - developerCurrentLevel.value))
+const developerLevelMet = computed(() => developerCurrentLevel.value >= developerMinLevel.value)
+const developerNeedsEmailVerification = computed(() => auth.developerStatus?.requires_email_verify ?? !auth.user?.email_verified)
+const developerAccessGranted = computed(() => auth.developerStatus?.can_create ?? (developerLevelMet.value && !developerNeedsEmailVerification.value))
+const developerAccessHint = computed(() => {
+  if (developerAccessGranted.value) return t('security.developerAccessGranted')
+  if (!developerLevelMet.value) return t('security.developerAccessNeedLevel', { count: developerLevelGap.value })
+  if (developerNeedsEmailVerification.value) return t('security.developerAccessNeedEmail')
+  return t('security.developerAccessNotReady')
 })
 
 function providerLabel(provider: string): string {
@@ -186,6 +209,38 @@ onMounted(fetchPasskeys)
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Developer Access -->
+      <div class="border border-border rounded-xl p-6 mb-6">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-sm font-medium mb-1">{{ $t('security.developerAccess') }}</h3>
+            <p class="text-xs text-muted-foreground">{{ $t('security.developerAccessDesc') }}</p>
+          </div>
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap" :class="developerAccessGranted ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'">
+            {{ developerAccessGranted ? $t('security.developerAccessMet') : $t('security.developerAccessUnmet') }}
+          </span>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-3 mt-5">
+          <div class="rounded-lg bg-muted/40 px-4 py-3">
+            <div class="text-xs text-muted-foreground mb-1">{{ $t('security.developerCurrentLevel') }}</div>
+            <div class="text-lg font-semibold tabular-nums">L{{ developerCurrentLevel }}</div>
+          </div>
+          <div class="rounded-lg bg-muted/40 px-4 py-3">
+            <div class="text-xs text-muted-foreground mb-1">{{ $t('security.developerRequiredLevel') }}</div>
+            <div class="text-lg font-semibold tabular-nums">L{{ developerMinLevel }}</div>
+          </div>
+          <div class="rounded-lg bg-muted/40 px-4 py-3">
+            <div class="text-xs text-muted-foreground mb-1">{{ $t('security.emailVerified') }}</div>
+            <div class="text-sm font-medium" :class="developerNeedsEmailVerification ? 'text-muted-foreground' : 'text-success'">
+              {{ developerNeedsEmailVerification ? $t('security.incomplete') : $t('security.completed') }}
+            </div>
+          </div>
+        </div>
+        <p class="mt-4 text-sm" :class="developerAccessGranted ? 'text-success' : 'text-muted-foreground'">
+          {{ developerAccessHint }}
+        </p>
       </div>
 
       <!-- Current Bindings -->
@@ -292,7 +347,7 @@ onMounted(fetchPasskeys)
         <div class="space-y-2.5 text-sm">
           <div class="flex justify-between gap-4 py-2 border-b border-border">
             <span class="text-muted-foreground">{{ $t('profile.uid') }}</span>
-            <span class="font-mono text-xs text-right break-all">{{ auth.user?.id || '-' }}</span>
+            <span class="font-mono text-xs text-right break-all">{{ auth.user?.uid || '-' }}</span>
           </div>
           <div class="flex justify-between py-2 border-b border-border">
             <span class="text-muted-foreground">{{ $t('security.emailVerified') }}</span>

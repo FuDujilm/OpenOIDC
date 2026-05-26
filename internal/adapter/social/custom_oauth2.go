@@ -37,10 +37,13 @@ func NewCustomOAuth2Provider(name, clientID, clientSecret string, custom domain.
 			if uid == "" {
 				return nil, fmt.Errorf("custom oauth2 user missing id at %q", custom.IDPath)
 			}
+			email := valueAtPath(raw, custom.EmailPath)
+			emailVerified, _ := rawProfileBool(raw, "email_verified")
+			raw = normalizeRawProfile(raw, email)
 			return &port.ProviderUserInfo{
 				ProviderUID:   uid,
-				Email:         valueAtPath(raw, custom.EmailPath),
-				EmailVerified: boolAtPath(raw, "email_verified"),
+				Email:         email,
+				EmailVerified: emailVerified,
 				DisplayName:   valueAtPath(raw, custom.NamePath),
 				AvatarURL:     valueAtPath(raw, custom.AvatarPath),
 				RawProfile:    raw,

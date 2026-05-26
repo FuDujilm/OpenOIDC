@@ -12,6 +12,7 @@ const toast = useToastStore()
 
 interface User {
   id: string
+  uid: number
   email: string
   email_verified: boolean
   display_name: string
@@ -480,7 +481,7 @@ function statusLabel(status: string) {
           <tr v-for="user in users" :key="user.id" class="hover:bg-muted/30 transition-colors">
             <td class="px-4 py-3">
               <div class="font-medium">{{ user.email }}</div>
-              <div class="text-xs text-muted-foreground font-mono mt-0.5">{{ $t('adminUsers.uid') }} {{ user.id }}</div>
+              <div class="text-xs text-muted-foreground font-mono mt-0.5">{{ $t('adminUsers.uid') }} {{ user.uid }}</div>
               <div class="text-xs text-muted-foreground">{{ user.display_name || $t('adminUsers.noDisplayName') }} · {{ user.email_verified ? $t('adminUsers.emailVerified') : $t('adminUsers.emailUnverified') }}</div>
             </td>
             <td class="px-4 py-3">
@@ -574,7 +575,7 @@ function statusLabel(status: string) {
           <button @click="showDetailModal = false" class="text-muted-foreground hover:text-foreground"><X class="w-5 h-5" /></button>
         </div>
         <div class="grid grid-cols-2 gap-4 text-sm mb-6">
-          <div class="col-span-2"><div class="text-muted-foreground">{{ $t('adminUsers.uid') }}</div><div class="font-mono text-xs break-all">{{ detailUser.id }}</div></div>
+          <div class="col-span-2"><div class="text-muted-foreground">{{ $t('adminUsers.uid') }}</div><div class="font-mono text-xs break-all">{{ detailUser.uid }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.email') }}</div><div class="font-medium">{{ detailUser.email }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.name') }}</div><div class="font-medium">{{ detailUser.display_name || '-' }}</div></div>
           <div><div class="text-muted-foreground">{{ $t('adminUsers.alias') }}</div><div class="font-medium">{{ detailUser.alias || '-' }}</div></div>

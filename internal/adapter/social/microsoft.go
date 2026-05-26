@@ -44,6 +44,7 @@ func NewMicrosoftProvider(clientID, clientSecret, tenantID string) *OAuth2Provid
 			}
 			var raw map[string]any
 			_ = json.Unmarshal(body, &raw)
+			raw = normalizeRawProfile(raw, email)
 			return &port.ProviderUserInfo{
 				ProviderUID: u.ID,
 				Email:       email,

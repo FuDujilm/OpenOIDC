@@ -4,21 +4,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@/stores/toast'
+import { useAuthStore } from '@/stores/auth'
 import {
   Loader2,
-  Github,
-  Chrome,
-  Gitlab,
-  MessageCircle,
-  Apple,
-  Gamepad2,
-  Building2,
-  Send,
   Link2,
   Unlink,
   ExternalLink,
   X,
 } from 'lucide-vue-next'
+import { usePublicConfig, getProviderIcon, isGoogleProvider, GOOGLE_SVG, type EnabledProvider } from '@/composables/usePublicConfig'
 
 interface Binding {
   id: string
@@ -28,23 +22,24 @@ interface Binding {
   bound_at: string
 }
 
-const PROVIDERS = [
-  { id: 'github', name: 'GitHub', icon: Github },
-  { id: 'google', name: 'Google', icon: Chrome },
-  { id: 'gitlab', name: 'GitLab', icon: Gitlab },
-  { id: 'gitee', name: 'Gitee', icon: ExternalLink },
-  { id: 'discord', name: 'Discord', icon: Gamepad2 },
-  { id: 'microsoft', name: 'Microsoft', icon: Building2 },
-  { id: 'qq', name: 'QQ', icon: MessageCircle },
-  { id: 'wechat', name: 'WeChat', icon: MessageCircle },
-  { id: 'telegram', name: 'Telegram', icon: Send },
-  { id: 'apple', name: 'Apple', icon: Apple },
-] as const
+interface BindingProvider {
+  id: string
+  name: string
+  iconUrl?: string
+  binding?: Binding
+}
+
+interface BoundBindingProvider extends BindingProvider {
+  binding: Binding
+}
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const toastStore = useToastStore()
+const authStore = useAuthStore()
+
+const { providers, settings, loaded } = usePublicConfig()
 
 const bindings = ref<Binding[]>([])
 const loading = ref(true)
@@ -55,11 +50,12 @@ const showUnbindModal = ref(false)
 const unbindTarget = ref<string | null>(null)
 const unbindTargetName = ref('')
 
-onMounted(() => {
+onMounted(async () => {
   const result = route.query.result as string
   const errorParam = route.query.error as string
   if (result === 'bind_success') {
     toastStore.success(t('bindings.bindSuccess'))
+    await refreshAuthState()
   } else if (errorParam) {
     toastStore.error(t(`bindings.errors.${errorParam}`, errorParam))
   }
@@ -68,6 +64,11 @@ onMounted(() => {
   }
   fetchBindings()
 })
+
+async function refreshAuthState() {
+  await authStore.fetchUser()
+  await authStore.fetchDeveloperStatus()
+}
 
 async function fetchBindings() {
   loading.value = true
@@ -82,18 +83,40 @@ async function fetchBindings() {
   }
 }
 
-const boundProviders = computed(() => {
-  const boundIds = new Set(bindings.value.map((b) => b.provider))
-  return PROVIDERS.filter((p) => boundIds.has(p.id)).map((p) => ({
-    ...p,
-    binding: bindings.value.find((b) => b.provider === p.id)!,
-  }))
+function enabledProviderItem(provider: EnabledProvider): BindingProvider {
+  return {
+    id: provider.name,
+    name: provider.display_name || provider.name,
+    iconUrl: provider.icon_url,
+  }
+}
+
+const enabledBindingProviders = computed<BindingProvider[]>(() => {
+  return providers.value.map(enabledProviderItem)
 })
 
-const unboundProviders = computed(() => {
-  const boundIds = new Set(bindings.value.map((b) => b.provider))
-  return PROVIDERS.filter((p) => !boundIds.has(p.id))
+const pageLoading = computed(() => loading.value || !loaded.value)
+const socialBindingDisabled = computed(() => loaded.value && !settings.value.social_binding_enabled)
+const hasEnabledProviders = computed(() => enabledBindingProviders.value.length > 0)
+
+const boundProviders = computed<BoundBindingProvider[]>(() => {
+  return enabledBindingProviders.value
+    .map((provider) => {
+      const binding = bindings.value.find((b) => b.provider === provider.id)
+      return binding ? { ...provider, binding } : null
+    })
+    .filter((provider): provider is BoundBindingProvider => provider !== null)
 })
+
+const unboundProviders = computed<BindingProvider[]>(() => {
+  if (!settings.value.social_binding_enabled) return []
+  const boundIds = new Set(bindings.value.map((b) => b.provider))
+  return enabledBindingProviders.value.filter((p) => !boundIds.has(p.id))
+})
+
+function providerInitial(name: string) {
+  return name.trim().slice(0, 1).toUpperCase() || '?'
+}
 
 function confirmUnbind(providerId: string, providerName: string) {
   unbindTarget.value = providerId
@@ -109,6 +132,7 @@ async function doUnbind() {
   try {
     await api.del(`/me/bindings/${provider}`)
     bindings.value = bindings.value.filter((b) => b.provider !== provider)
+    await refreshAuthState()
   } catch (e: any) {
     error.value = e.message
   } finally {
@@ -144,7 +168,7 @@ function formatDate(iso: string) {
       {{ error }}
     </div>
 
-    <div v-if="loading" class="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
+    <div v-if="pageLoading" class="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
       <Loader2 class="w-4 h-4 animate-spin" /> {{ $t('bindings.loadingBindings') }}
     </div>
 
@@ -161,7 +185,19 @@ function formatDate(iso: string) {
           >
             <div class="flex items-center gap-4">
               <div class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                <component :is="item.icon" class="w-5 h-5" />
+                <img
+                  v-if="item.iconUrl"
+                  :src="item.iconUrl"
+                  :alt="item.name"
+                  class="w-5 h-5 object-contain"
+                />
+                <span v-else-if="isGoogleProvider(item.id)" v-html="GOOGLE_SVG" />
+                <svg v-else-if="getProviderIcon(item.id)" class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                  <path :d="getProviderIcon(item.id)!.path" :fill="getProviderIcon(item.id)!.color" />
+                </svg>
+                <span v-else class="text-sm font-semibold text-muted-foreground">
+                  {{ providerInitial(item.name) }}
+                </span>
               </div>
               <div>
                 <div class="text-sm font-medium">{{ item.name }}</div>
@@ -198,7 +234,19 @@ function formatDate(iso: string) {
             class="border border-border rounded-xl p-4 flex items-center gap-3.5 hover:bg-muted/50 transition-colors text-left"
           >
             <div class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              <component :is="provider.icon" class="w-5 h-5 text-muted-foreground" />
+              <img
+                v-if="provider.iconUrl"
+                :src="provider.iconUrl"
+                :alt="provider.name"
+                class="w-5 h-5 object-contain"
+              />
+              <span v-else-if="isGoogleProvider(provider.id)" v-html="GOOGLE_SVG" />
+              <svg v-else-if="getProviderIcon(provider.id)" class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                <path :d="getProviderIcon(provider.id)!.path" :fill="getProviderIcon(provider.id)!.color" />
+              </svg>
+              <span v-else class="text-sm font-semibold text-muted-foreground">
+                {{ providerInitial(provider.name) }}
+              </span>
             </div>
             <div>
               <div class="text-sm font-medium">{{ provider.name }}</div>
@@ -208,7 +256,15 @@ function formatDate(iso: string) {
         </div>
       </div>
 
-      <div v-if="!unboundProviders.length && boundProviders.length" class="text-sm text-muted-foreground text-center py-6">
+      <div v-if="socialBindingDisabled" class="text-sm text-muted-foreground text-center py-6">
+        {{ $t('bindings.bindingDisabled') }}
+      </div>
+
+      <div v-else-if="!hasEnabledProviders" class="text-sm text-muted-foreground text-center py-6">
+        {{ $t('bindings.noAvailableProviders') }}
+      </div>
+
+      <div v-else-if="!unboundProviders.length && boundProviders.length" class="text-sm text-muted-foreground text-center py-6">
         {{ $t('bindings.allConnected') }}
       </div>
     </template>

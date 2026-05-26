@@ -13,9 +13,31 @@ const (
 	OperatorOR  RuleOperator = "OR"
 )
 
+type RuleConditionType string
+
+const (
+	ConditionProviderBound          RuleConditionType = "provider_bound"
+	ConditionBindingAgeDays         RuleConditionType = "binding_age_days"
+	ConditionProviderAccountAgeDays RuleConditionType = "provider_account_age_days"
+	ConditionProviderEmailVerified  RuleConditionType = "provider_email_verified"
+	ConditionProviderEmailDomain    RuleConditionType = "provider_email_domain"
+	ConditionProviderRawNumber      RuleConditionType = "provider_raw_number"
+	ConditionProviderRawString      RuleConditionType = "provider_raw_string"
+	ConditionProviderRawBool        RuleConditionType = "provider_raw_bool"
+	ConditionUserEmailDomain        RuleConditionType = "user_email_domain"
+	ConditionUserCreatedAgeDays     RuleConditionType = "user_created_age_days"
+	ConditionUserHasVerifiedEmail   RuleConditionType = "user_has_verified_email"
+)
+
 type RuleCondition struct {
-	Provider       string `json:"provider"`
-	MinBindingDays int    `json:"min_binding_days"`
+	Type           RuleConditionType `json:"type,omitempty"`
+	Provider       string            `json:"provider,omitempty"`
+	Field          string            `json:"field,omitempty"`
+	Operator       string            `json:"operator,omitempty"`
+	Value          any               `json:"value,omitempty"`
+	Values         []string          `json:"values,omitempty"`
+	MinDays        int               `json:"min_days,omitempty"`
+	MinBindingDays int               `json:"min_binding_days,omitempty"`
 }
 
 type RuleConditions struct {

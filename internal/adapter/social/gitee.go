@@ -43,6 +43,7 @@ func NewGiteeProvider(clientID, clientSecret string) *OAuth2Provider {
 			}
 			var raw map[string]any
 			_ = json.Unmarshal(body, &raw)
+			raw = normalizeRawProfile(raw, u.Email)
 			return &port.ProviderUserInfo{
 				ProviderUID: strconv.FormatInt(u.ID, 10),
 				Email:       u.Email,

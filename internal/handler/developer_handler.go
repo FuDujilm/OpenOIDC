@@ -431,14 +431,34 @@ func (h *DeveloperHandler) requireOwnedClient(w http.ResponseWriter, r *http.Req
 }
 
 func (h *DeveloperHandler) requireAppUser(w http.ResponseWriter, r *http.Request, client *domain.OIDCClient) (uuid.UUID, bool) {
-	rawUID := chi.URLParam(r, "uid")
-	if strings.TrimSpace(rawUID) == "" {
-		rawUID = r.URL.Query().Get("user_id")
+	rawUID := strings.TrimSpace(chi.URLParam(r, "uid"))
+	if rawUID == "" {
+		rawUID = strings.TrimSpace(r.URL.Query().Get("user_id"))
 	}
-	targetID, err := uuid.Parse(rawUID)
-	if err != nil {
+	if rawUID == "" {
 		Error(w, http.StatusBadRequest, "invalid_input", "invalid user id")
 		return uuid.Nil, false
+	}
+
+	var targetID uuid.UUID
+	if parsedID, err := uuid.Parse(rawUID); err == nil {
+		targetID = parsedID
+	} else {
+		if h.userRepo == nil {
+			Error(w, http.StatusBadRequest, "invalid_input", "invalid user id")
+			return uuid.Nil, false
+		}
+		numericUID, parseErr := strconv.ParseInt(rawUID, 10, 64)
+		if parseErr != nil || numericUID <= 0 {
+			Error(w, http.StatusBadRequest, "invalid_input", "invalid user id")
+			return uuid.Nil, false
+		}
+		user, lookupErr := h.userRepo.GetByUID(r.Context(), numericUID)
+		if lookupErr != nil {
+			mapAdminError(w, lookupErr)
+			return uuid.Nil, false
+		}
+		targetID = user.ID
 	}
 	if h.userRepo != nil {
 		if _, err := h.userRepo.GetByID(r.Context(), targetID); err != nil {
