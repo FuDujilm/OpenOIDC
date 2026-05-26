@@ -101,6 +101,7 @@ func NewRouter(d Deps) *chi.Mux {
 			r.Get("/me/bindings", d.UserInfoHandler.ListBindings)
 			r.Delete("/me/bindings/{provider}", d.UserInfoHandler.Unbind)
 			r.Get("/me/security-level", d.UserInfoHandler.SecurityLevel)
+			r.Get("/me/activity", d.UserInfoHandler.ListActivity)
 			r.Post("/me/resend-verification", d.UserInfoHandler.ResendVerification)
 			r.Get("/me/sessions", d.UserInfoHandler.ListSessions)
 			r.Delete("/me/sessions/{id}", d.UserInfoHandler.RevokeSession)

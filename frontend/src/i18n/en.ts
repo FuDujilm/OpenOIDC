@@ -57,6 +57,7 @@ export default {
     bindings: 'Bindings',
     security: 'Security',
     authorized: 'Apps',
+    activity: 'Recent Activity',
   },
 
   // Admin tabs
@@ -364,6 +365,17 @@ export default {
     revokeConfirm: 'Are you sure you want to revoke this session? The user will be logged out.',
     loadingSessions: 'Loading sessions...',
     noSessions: 'No active sessions found.',
+  },
+
+  accountActivity: {
+    title: 'Recent Activity',
+    desc: 'Review recent login, authorization, profile, and security actions for your account.',
+    time: 'Time',
+    action: 'Action',
+    resource: 'Resource',
+    details: 'Details',
+    ip: 'IP Address',
+    empty: 'No recent activity found.',
   },
 
   // Bindings

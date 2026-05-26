@@ -188,7 +188,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 	// Handlers.
 	authHandler := handler.NewAuthHandler(authSvc, sessionSvc, cfg.Session)
 	socialHandler := handler.NewSocialHandler(socialSvc, socialRegistry, sessionSvc, cfg.Session)
-	userInfoHandler := handler.NewUserInfoHandler(userRepo, socialSvc, securitySvc, accessCtrl, authSvc, sessionSvc, consentRepo)
+	userInfoHandler := handler.NewUserInfoHandler(userRepo, socialSvc, securitySvc, accessCtrl, authSvc, sessionSvc, consentRepo, auditRepo)
 	adminHandler := handler.NewAdminHandler(adminSvc, clientSvc, securitySvc, userRepo, socialRegistry, riskSvc, sessionRepo, bindingRepo, consentRepo)
 	loginURL := cfg.Server.BaseURL + "/login"
 	oidcHandler := handler.NewOIDCHandler(provider, userRepo, clientSvc, accessCtrl, sessionSvc, cfg.Server, loginURL)

@@ -37,6 +37,7 @@ const router = createRouter({
         { path: 'bindings', component: () => import('@/pages/me/bindings.vue') },
         { path: 'security', component: () => import('@/pages/me/security.vue') },
         { path: 'authorized', component: () => import('@/pages/me/authorized.vue') },
+        { path: 'activity', component: () => import('@/pages/me/activity.vue') },
       ],
     },
     {

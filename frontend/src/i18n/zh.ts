@@ -57,6 +57,7 @@ export default {
     bindings: '绑定',
     security: '信任',
     authorized: '授权',
+    activity: '近期操作',
   },
 
   // Admin tabs
@@ -364,6 +365,17 @@ export default {
     revokeConfirm: '确定要撤销此会话吗？用户将被登出。',
     loadingSessions: '加载会话中...',
     noSessions: '暂无活跃会话。',
+  },
+
+  accountActivity: {
+    title: '近期操作',
+    desc: '查看当前账号最近的登录、授权、资料和安全相关操作。',
+    time: '时间',
+    action: '操作',
+    resource: '资源',
+    details: '详情',
+    ip: 'IP 地址',
+    empty: '暂无近期操作记录。',
   },
 
   // Bindings

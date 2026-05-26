@@ -22,6 +22,7 @@ type UserInfoHandler struct {
 	authSvc     *service.AuthService
 	sessionSvc  *service.SessionService
 	consentRepo port.ConsentRepository
+	auditRepo   port.AuditRepository
 }
 
 func NewUserInfoHandler(
@@ -32,6 +33,7 @@ func NewUserInfoHandler(
 	authSvc *service.AuthService,
 	sessionSvc *service.SessionService,
 	consentRepo port.ConsentRepository,
+	auditRepo port.AuditRepository,
 ) *UserInfoHandler {
 	return &UserInfoHandler{
 		userRepo:    userRepo,
@@ -41,6 +43,7 @@ func NewUserInfoHandler(
 		authSvc:     authSvc,
 		sessionSvc:  sessionSvc,
 		consentRepo: consentRepo,
+		auditRepo:   auditRepo,
 	}
 }
 
@@ -215,6 +218,47 @@ func (h *UserInfoHandler) SecurityLevel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	JSON(w, http.StatusOK, info)
+}
+
+func (h *UserInfoHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
+	userID, err := mw.GetUserID(r.Context())
+	if err != nil {
+		Error(w, http.StatusUnauthorized, "unauthenticated", err.Error())
+		return
+	}
+	if h.auditRepo == nil {
+		JSON(w, http.StatusOK, []any{})
+		return
+	}
+	q := r.URL.Query()
+	limit := parseIntDefault(q.Get("limit"), 30)
+	if limit > 100 {
+		limit = 100
+	}
+	offset := parseIntDefault(q.Get("offset"), 0)
+	if offset < 0 {
+		offset = 0
+	}
+	logs, total, err := h.auditRepo.ListLogs(r.Context(), port.ListAuditOptions{UserID: &userID, Offset: offset, Limit: limit})
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	out := make([]map[string]any, 0, len(logs))
+	for _, log := range logs {
+		out = append(out, map[string]any{
+			"id":            log.ID,
+			"action":        log.Action,
+			"resource_type": log.ResourceType,
+			"resource_id":   log.ResourceID,
+			"ip_address":    log.IPAddress,
+			"user_agent":    log.UserAgent,
+			"details":       log.Details,
+			"details_text":  formatAuditDetails(log.Details),
+			"created_at":    log.CreatedAt,
+		})
+	}
+	PaginatedJSON(w, http.StatusOK, out, total, offset, limit)
 }
 
 func (h *UserInfoHandler) ListSessions(w http.ResponseWriter, r *http.Request) {

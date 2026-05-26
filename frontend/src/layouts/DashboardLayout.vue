@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Fingerprint, User, MonitorSmartphone, Link2, Shield, LogOut, Code2, ShieldCheck } from 'lucide-vue-next'
+import { Fingerprint, User, MonitorSmartphone, Link2, Shield, LogOut, Code2, ShieldCheck, ScrollText } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, currentLocale } from '@/i18n'
@@ -23,6 +23,7 @@ const nav = computed(() => [
   { to: '/me/bindings', label: t('dashboard.bindings'), icon: Link2 },
   { to: '/me/security', label: t('dashboard.security'), icon: Shield },
   { to: '/me/authorized', label: t('dashboard.authorized'), icon: ShieldCheck },
+  { to: '/me/activity', label: t('dashboard.activity'), icon: ScrollText },
 ])
 
 function isActive(path: string) {
