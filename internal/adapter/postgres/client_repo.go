@@ -48,6 +48,7 @@ func (r *ClientRepo) Create(ctx context.Context, c *domain.OIDCClient) error {
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
+	normalizeClientSlices(c)
 	now := time.Now().UTC()
 	if c.CreatedAt.IsZero() {
 		c.CreatedAt = now
@@ -70,6 +71,24 @@ func (r *ClientRepo) Create(ctx context.Context, c *domain.OIDCClient) error {
 		return fmt.Errorf("insert client: %w", err)
 	}
 	return nil
+}
+
+func normalizeClientSlices(c *domain.OIDCClient) {
+	if c.RedirectURIs == nil {
+		c.RedirectURIs = []string{}
+	}
+	if c.PostLogoutRedirectURIs == nil {
+		c.PostLogoutRedirectURIs = []string{}
+	}
+	if c.GrantTypes == nil {
+		c.GrantTypes = []string{}
+	}
+	if c.ResponseTypes == nil {
+		c.ResponseTypes = []string{}
+	}
+	if c.Scopes == nil {
+		c.Scopes = []string{}
+	}
 }
 
 func (r *ClientRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.OIDCClient, error) {
@@ -161,6 +180,7 @@ func (r *ClientRepo) ListByOwner(ctx context.Context, ownerID uuid.UUID, offset,
 }
 
 func (r *ClientRepo) Update(ctx context.Context, c *domain.OIDCClient) error {
+	normalizeClientSlices(c)
 	c.UpdatedAt = time.Now().UTC()
 	query := `
 		UPDATE oidc_clients SET

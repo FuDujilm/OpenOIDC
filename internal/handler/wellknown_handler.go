@@ -8,28 +8,31 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
+	"strings"
 
 	"github.com/anthropic/oidc-platform/internal/port"
 )
 
 type WellKnownHandler struct {
 	baseURL        string
+	settingsRepo   port.SettingsRepository
 	signingKeyRepo port.SigningKeyRepository
 }
 
-func NewWellKnownHandler(baseURL string, signingKeyRepo port.SigningKeyRepository) *WellKnownHandler {
-	return &WellKnownHandler{baseURL: baseURL, signingKeyRepo: signingKeyRepo}
+func NewWellKnownHandler(baseURL string, settingsRepo port.SettingsRepository, signingKeyRepo port.SigningKeyRepository) *WellKnownHandler {
+	return &WellKnownHandler{baseURL: strings.TrimRight(baseURL, "/"), settingsRepo: settingsRepo, signingKeyRepo: signingKeyRepo}
 }
 
 func (h *WellKnownHandler) Discovery(w http.ResponseWriter, r *http.Request) {
+	baseURL := h.publicBaseURL(r)
 	doc := map[string]any{
-		"issuer":                                h.baseURL,
-		"authorization_endpoint":                h.baseURL + "/oauth2/authorize",
-		"token_endpoint":                        h.baseURL + "/oauth2/token",
-		"userinfo_endpoint":                     h.baseURL + "/oauth2/userinfo",
-		"jwks_uri":                              h.baseURL + "/jwks.json",
-		"revocation_endpoint":                   h.baseURL + "/oauth2/revoke",
-		"introspection_endpoint":                h.baseURL + "/oauth2/introspect",
+		"issuer":                                baseURL,
+		"authorization_endpoint":                baseURL + "/oauth2/authorize",
+		"token_endpoint":                        baseURL + "/oauth2/token",
+		"userinfo_endpoint":                     baseURL + "/oauth2/userinfo",
+		"jwks_uri":                              baseURL + "/jwks.json",
+		"revocation_endpoint":                   baseURL + "/oauth2/revoke",
+		"introspection_endpoint":                baseURL + "/oauth2/introspect",
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
 		"subject_types_supported":               []string{"public"},
@@ -43,6 +46,18 @@ func (h *WellKnownHandler) Discovery(w http.ResponseWriter, r *http.Request) {
 		"code_challenge_methods_supported": []string{"plain", "S256"},
 	}
 	Raw(w, http.StatusOK, doc)
+}
+
+func (h *WellKnownHandler) publicBaseURL(r *http.Request) string {
+	if h.settingsRepo != nil {
+		setting, err := h.settingsRepo.Get(r.Context(), "site_url")
+		if err == nil && setting != nil {
+			if value := strings.TrimRight(strings.TrimSpace(setting.Value), "/"); value != "" {
+				return value
+			}
+		}
+	}
+	return h.baseURL
 }
 
 func (h *WellKnownHandler) JWKS(w http.ResponseWriter, r *http.Request) {

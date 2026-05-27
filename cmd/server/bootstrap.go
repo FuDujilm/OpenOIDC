@@ -190,10 +190,9 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 	socialHandler := handler.NewSocialHandler(socialSvc, socialRegistry, sessionSvc, cfg.Session)
 	userInfoHandler := handler.NewUserInfoHandler(userRepo, socialSvc, securitySvc, accessCtrl, authSvc, sessionSvc, consentRepo, auditRepo)
 	adminHandler := handler.NewAdminHandler(adminSvc, clientSvc, securitySvc, userRepo, socialRegistry, riskSvc, sessionRepo, bindingRepo, consentRepo)
-	loginURL := cfg.Server.BaseURL + "/login"
-	oidcHandler := handler.NewOIDCHandler(provider, userRepo, clientSvc, accessCtrl, sessionSvc, cfg.Server, loginURL)
+	oidcHandler := handler.NewOIDCHandler(provider, userRepo, clientSvc, accessCtrl, sessionSvc, settingsRepo, cfg.Server, "/login")
 	oidcHandler.SetCache(cache)
-	wellKnownHandler := handler.NewWellKnownHandler(cfg.Server.BaseURL, signingKeyRepo)
+	wellKnownHandler := handler.NewWellKnownHandler(cfg.Server.BaseURL, settingsRepo, signingKeyRepo)
 	devHandler := handler.NewDeveloperHandler(clientSvc, riskSvc, userRepo, settingsRepo, consentRepo, cfg.Server.Issuer)
 	healthHandler := handler.NewHealthHandler(pgPool, redisClient)
 	passkeyHandler := handler.NewPasskeyHandler(passkeySvc, cfg.Session)

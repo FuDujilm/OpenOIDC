@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,14 +18,15 @@ import (
 )
 
 type OIDCHandler struct {
-	provider   fosite.OAuth2Provider
-	userRepo   port.UserRepository
-	clientSvc  *service.ClientService
-	accessCtrl *service.AccessControlService
-	sessionSvc *service.SessionService
-	cache      port.Cache
-	serverCfg  config.ServerConfig
-	loginURL   string
+	provider     fosite.OAuth2Provider
+	userRepo     port.UserRepository
+	clientSvc    *service.ClientService
+	accessCtrl   *service.AccessControlService
+	sessionSvc   *service.SessionService
+	settingsRepo port.SettingsRepository
+	cache        port.Cache
+	serverCfg    config.ServerConfig
+	loginURL     string
 }
 
 func NewOIDCHandler(
@@ -33,17 +35,19 @@ func NewOIDCHandler(
 	clientSvc *service.ClientService,
 	accessCtrl *service.AccessControlService,
 	sessionSvc *service.SessionService,
+	settingsRepo port.SettingsRepository,
 	serverCfg config.ServerConfig,
 	loginURL string,
 ) *OIDCHandler {
 	return &OIDCHandler{
-		provider:   provider,
-		userRepo:   userRepo,
-		clientSvc:  clientSvc,
-		accessCtrl: accessCtrl,
-		sessionSvc: sessionSvc,
-		serverCfg:  serverCfg,
-		loginURL:   loginURL,
+		provider:     provider,
+		userRepo:     userRepo,
+		clientSvc:    clientSvc,
+		accessCtrl:   accessCtrl,
+		sessionSvc:   sessionSvc,
+		settingsRepo: settingsRepo,
+		serverCfg:    serverCfg,
+		loginURL:     loginURL,
 	}
 }
 
@@ -171,7 +175,7 @@ func (h *OIDCHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 		ar.GrantAudience(aud)
 	}
 
-	session := oidcprovider.NewSession(user.ID.String(), user.SecurityLevel, h.serverCfg.Issuer, client.ClientID, user.ID.String())
+	session := oidcprovider.NewSession(user.ID.String(), user.SecurityLevel, h.publicIssuer(r), client.ClientID, user.ID.String())
 	oidcprovider.AddCustomClaims(session, map[string]any{
 		"email":          user.Email,
 		"email_verified": user.EmailVerified,
@@ -187,6 +191,21 @@ func (h *OIDCHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.provider.WriteAuthorizeResponse(ctx, w, ar, response)
+}
+
+func (h *OIDCHandler) publicIssuer(r *http.Request) string {
+	if h.settingsRepo != nil {
+		setting, err := h.settingsRepo.Get(r.Context(), "site_url")
+		if err == nil && setting != nil {
+			if value := strings.TrimRight(strings.TrimSpace(setting.Value), "/"); value != "" {
+				return value
+			}
+		}
+	}
+	if value := strings.TrimRight(strings.TrimSpace(h.serverCfg.Issuer), "/"); value != "" {
+		return value
+	}
+	return strings.TrimRight(strings.TrimSpace(h.serverCfg.BaseURL), "/")
 }
 
 // Token handles POST /oauth2/token.
