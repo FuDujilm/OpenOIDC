@@ -60,6 +60,7 @@ const DEDICATED_SETTING_KEYS = new Set([
   'risk_blocked_ips',
   'risk_blocked_emails',
   'risk_blocked_email_domains',
+  'risk_blocked_email_patterns',
 ])
 
 function tOrFallback(path: string, fallback: string) {

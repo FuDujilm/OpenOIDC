@@ -608,13 +608,16 @@ func (s *AdminService) RotateSigningKey(ctx context.Context) (*domain.SigningKey
 		Algorithm:  "RS256",
 		PrivateKey: privPEM,
 		PublicKey:  pubPEM,
-		IsCurrent:  true,
+		IsCurrent:  false,
 		CreatedAt:  now,
 	}
 
 	old, err := s.signingKeyRepo.GetCurrent(ctx)
 	if err != nil && !errors.Is(err, port.ErrNotFound) {
 		return nil, fmt.Errorf("get current key: %w", err)
+	}
+	if old == nil {
+		newKey.IsCurrent = true
 	}
 	if err := s.signingKeyRepo.Create(ctx, newKey); err != nil {
 		return nil, fmt.Errorf("create signing key: %w", err)
@@ -623,6 +626,7 @@ func (s *AdminService) RotateSigningKey(ctx context.Context) (*domain.SigningKey
 		if err := s.signingKeyRepo.Rotate(ctx, old.ID, newKey.ID); err != nil {
 			return nil, fmt.Errorf("rotate: %w", err)
 		}
+		newKey.IsCurrent = true
 	}
 	rt := "signing_key"
 	rid := newKey.ID.String()

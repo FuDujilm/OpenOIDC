@@ -378,13 +378,9 @@ func validateRedirectURIs(redirectURIs []string, required bool) error {
 			return fmt.Errorf("%w: invalid redirect_uri", ErrInvalidInput)
 		}
 		switch u.Scheme {
-		case "http":
-			if u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
-				return fmt.Errorf("%w: http redirect_uri only allowed for localhost", ErrInvalidInput)
-			}
-		case "https":
+		case "http", "https":
 		default:
-			return fmt.Errorf("%w: redirect_uri must use https", ErrInvalidInput)
+			return fmt.Errorf("%w: redirect_uri must use http or https", ErrInvalidInput)
 		}
 	}
 	return nil
@@ -410,13 +406,9 @@ func validatePostLogoutRedirectURIs(uris []string) error {
 			return fmt.Errorf("%w: invalid post_logout_redirect_uri", ErrInvalidInput)
 		}
 		switch u.Scheme {
-		case "http":
-			if u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
-				return fmt.Errorf("%w: http post_logout_redirect_uri only allowed for localhost", ErrInvalidInput)
-			}
-		case "https":
+		case "http", "https":
 		default:
-			return fmt.Errorf("%w: post_logout_redirect_uri must use https", ErrInvalidInput)
+			return fmt.Errorf("%w: post_logout_redirect_uri must use http or https", ErrInvalidInput)
 		}
 	}
 	return nil

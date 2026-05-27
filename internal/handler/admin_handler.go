@@ -53,9 +53,6 @@ func (h *AdminHandler) ensureCanManageTargetUser(ctx context.Context, targetID u
 		}
 		return nil, err
 	}
-	if caller.ID == target.ID && !allowSelf {
-		return nil, fmt.Errorf("%w: cannot perform this action on your own account", service.ErrPermissionDenied)
-	}
 	if target.IsSuperAdmin() && !caller.IsSuperAdmin() {
 		return nil, fmt.Errorf("%w: only super_admin can manage super_admin accounts", service.ErrPermissionDenied)
 	}
@@ -247,7 +244,7 @@ func (h *AdminHandler) OverrideSecurityLevel(w http.ResponseWriter, r *http.Requ
 		Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	if _, err := h.ensureCanManageTargetUser(r.Context(), id, false); err != nil {
+	if _, err := h.ensureCanManageTargetUser(r.Context(), id, true); err != nil {
 		mapAdminError(w, err)
 		return
 	}
