@@ -33,9 +33,7 @@ services:
       retries: 10
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${OIDC_IMAGE:-ghcr.io/luotianyi-0712/openoidc:latest}
     container_name: oidc-app
     restart: unless-stopped
     depends_on:

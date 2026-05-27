@@ -1,5 +1,7 @@
 # OIDC Platform
 
+Current version: **v1.12**
+
 A self-hosted, developer-oriented identity platform built on top of OpenID Connect / OAuth 2.0. Users register with email and bind third-party accounts (GitHub, Gitee, GitLab, Discord, Google, Microsoft, Apple, Telegram, QQ, WeChat, phone, etc.) to raise their **trust level**. Downstream systems integrate once via standard OIDC and gain low-cost risk control by declaring a minimum trust level plus optional conditions.
 
 > One-liner: **a drop-in risk-control layer for your apps, served over standard OIDC.**
@@ -89,32 +91,46 @@ data/                  # runtime SQLite database (gitignored)
 
 ## Quick Start
 
-### SQLite (single binary)
+### Recommended: Docker image
+
+The recommended deployment path is to pull the published GHCR image and run it with PostgreSQL + Redis via Docker Compose.
+
+```bash
+cp .env.example .env
+# Edit .env before production use, especially issuer/public URL, admin password, and encryption key.
+docker compose pull
+docker compose up -d
+```
+
+Default image:
+
+```text
+ghcr.io/luotianyi-0712/openoidc:latest
+```
+
+Use a fixed tag instead of `latest` when you want a pinned release:
+
+```bash
+OIDC_IMAGE=ghcr.io/luotianyi-0712/openoidc:v1.12 docker compose up -d
+```
+
+The server listens on `http://localhost:8080` by default. Change `OIDC_SERVER_ISSUER`, `OIDC_SERVER_PUBLIC_URL`, `OIDC_ADMIN_PASSWORD`, and `OIDC_SECRETS_CLIENT_SECRET_ENCRYPTION_KEY` in `.env` before any non-local use.
+
+### Source / single-binary build
 
 Requires Go 1.23+ and Node 18+.
 
 ```bash
-# 1. Build the front end
 cd frontend
 npm install
 npm run build
 cd ..
 
-# 2. Build and run the server
-go build -o oidc-platform ./cmd/server
-./oidc-platform    # uses configs/config.yaml (SQLite by default)
+go build -o oidc ./cmd/server
+./oidc    # uses configs/config.yaml (SQLite by default)
 ```
 
-On Windows you can also run `start.bat`.
-
-The server listens on `http://localhost:8080`. Admin credentials live in `configs/config.yaml` (`admin.email` / `admin.password`) — change them before any non-local use.
-
-### PostgreSQL + Redis (Docker Compose)
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
+On Windows you can also run `start.bat` or build `oidc.exe`.
 
 ## Configuration
 
