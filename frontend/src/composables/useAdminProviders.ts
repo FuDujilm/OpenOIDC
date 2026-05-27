@@ -134,7 +134,7 @@ export const providerMeta: Record<string, ProviderMeta> = {
     callbackPath: '/api/v1/social/gitee/callback',
   },
   linuxdo: {
-    label: 'Linux DO Connect',
+    label: 'Linux DO',
     color: '#1f2937',
     icon: '',
     fields: [

@@ -82,7 +82,7 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isLoggedIn) return { path: '/login', query: { return_to: to.fullPath } }
   if (auth.isLoggedIn) await auth.fetchDeveloperStatus()
   if (to.meta.requiresAdmin && !auth.isAdmin) return '/'
-  if (to.meta.requiresDeveloper && !auth.isLoggedIn) return { path: '/login', query: { return_to: to.fullPath } }
+  if (to.meta.requiresDeveloper && !auth.canShowDeveloperConsole) return '/me'
 })
 
 export default router

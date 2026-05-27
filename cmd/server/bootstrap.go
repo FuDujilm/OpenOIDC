@@ -373,7 +373,7 @@ func seedProviders(ctx context.Context, repo port.ProviderConfigRepository) {
 		domain.ProviderGoogle:    "Google",
 		domain.ProviderGitLab:    "GitLab",
 		domain.ProviderGitee:     "Gitee",
-		domain.ProviderLinuxDO:   "Linux DO Connect",
+		domain.ProviderLinuxDO:   "Linux DO",
 		domain.ProviderDiscord:   "Discord",
 		domain.ProviderTelegram:  "Telegram",
 		domain.ProviderMicrosoft: "Microsoft",

@@ -271,7 +271,7 @@ func providerDisplayName(name string) string {
 	case domain.ProviderGitee:
 		return "Gitee"
 	case domain.ProviderLinuxDO:
-		return "Linux DO Connect"
+		return "Linux DO"
 	case domain.ProviderDiscord:
 		return "Discord"
 	case domain.ProviderTelegram:
