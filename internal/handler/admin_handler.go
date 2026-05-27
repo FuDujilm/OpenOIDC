@@ -1368,6 +1368,8 @@ func (h *AdminHandler) DeleteAliasRestriction(w http.ResponseWriter, r *http.Req
 func (h *AdminHandler) PublicSettings(w http.ResponseWriter, r *http.Request) {
 	keys := []string{
 		"site_url",
+		"github_url",
+		"contact_info",
 		"registration_enabled",
 		"registration_email_verification_required",
 		"password_login_enabled",
@@ -1385,7 +1387,7 @@ func (h *AdminHandler) PublicSettings(w http.ResponseWriter, r *http.Request) {
 	for _, key := range keys {
 		setting, err := h.adminSvc.GetSetting(r.Context(), key)
 		if err != nil {
-			if key == "site_url" || key == "captcha_provider" || key == "captcha_site_key" || key == "turnstile_site_key" || key == "developer_min_trust_level" {
+			if key == "site_url" || key == "github_url" || key == "contact_info" || key == "captcha_provider" || key == "captcha_site_key" || key == "turnstile_site_key" || key == "developer_min_trust_level" {
 				result[key] = ""
 			} else {
 				result[key] = "true"

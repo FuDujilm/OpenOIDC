@@ -271,6 +271,10 @@ export default {
     heroDesc: '现代化 OIDC 身份认证平台，支持社交登录、分级安全体系和开发者友好的 API。',
     getStarted: '开始使用',
     discovery: '发现端点',
+    about: {
+      title: '关于我们',
+      github: 'GitHub 地址',
+    },
     stats: {
       providers: '社交登录',
       levels: '信任等级',
@@ -838,6 +842,11 @@ export default {
     siteURL: '站点域名',
     siteURLPlaceholder: 'https://id.example.com',
     siteURLHint: '填写可公开访问的完整地址，末尾斜杠会自动忽略。',
+    githubURL: 'GitHub 地址',
+    githubURLHint: '展示在首页“关于我们”折叠区。',
+    contactInfo: '联系方式',
+    contactInfoPlaceholder: '邮箱、Telegram、Discord 或支持页面地址',
+    contactInfoHint: '展示在首页页脚；留空则不显示。',
     siteSave: '保存站点域名',
     siteSaved: '站点域名已保存',
     labels: {

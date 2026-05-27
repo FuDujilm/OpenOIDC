@@ -3,12 +3,17 @@ package oidcprovider
 import (
 	"context"
 	"crypto/rsa"
+	"net/url"
 	"time"
 
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/compose"
 	"github.com/ory/fosite/token/jwt"
 )
+
+func allowHTTPRedirectURI(_ context.Context, u *url.URL) bool {
+	return u != nil && (u.Scheme == "http" || u.Scheme == "https")
+}
 
 // NewOAuth2Provider builds a fosite OAuth2Provider with OpenID Connect,
 // PKCE, token revocation and introspection enabled.
@@ -23,6 +28,7 @@ func NewOAuth2Provider(store fosite.Storage, secret []byte, privateKey *rsa.Priv
 		ClientSecretsHasher:         PlainSecretHasher{},
 		ScopeStrategy:               fosite.HierarchicScopeStrategy,
 		AudienceMatchingStrategy:    fosite.DefaultAudienceMatchingStrategy,
+		RedirectSecureChecker:       allowHTTPRedirectURI,
 		EnforcePKCEForPublicClients: true,
 	}
 

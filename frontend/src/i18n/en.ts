@@ -271,6 +271,10 @@ export default {
     heroDesc: 'A modern OIDC identity platform with social login, graduated trust levels, and developer-first APIs.',
     getStarted: 'Get started',
     discovery: 'Discovery',
+    about: {
+      title: 'About us',
+      github: 'GitHub repository',
+    },
     stats: {
       providers: 'Social providers',
       levels: 'Trust Levels',
@@ -844,6 +848,11 @@ export default {
     siteURL: 'Site URL',
     siteURLPlaceholder: 'https://id.example.com',
     siteURLHint: 'Enter the full publicly reachable URL. Trailing slashes are ignored.',
+    githubURL: 'GitHub URL',
+    githubURLHint: 'Displayed in the About section on the landing page.',
+    contactInfo: 'Contact information',
+    contactInfoPlaceholder: 'Email, Telegram, Discord, or support URL',
+    contactInfoHint: 'Displayed in the landing page footer. Leave empty to hide it.',
     siteSave: 'Save Site URL',
     siteSaved: 'Site URL saved',
     labels: {

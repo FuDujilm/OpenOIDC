@@ -12,6 +12,8 @@ export interface EnabledProvider {
 
 export interface PublicSettings {
   site_url: string
+  github_url: string
+  contact_info: string
   registration_enabled: boolean
   registration_email_verification_required: boolean
   password_login_enabled: boolean
@@ -95,6 +97,8 @@ export function usePublicConfig() {
   const providers = ref<EnabledProvider[]>([])
   const settings = ref<PublicSettings>({
     site_url: window.location.origin,
+    github_url: 'https://github.com/Luotianyi-0712/OpenOIDC',
+    contact_info: '',
     registration_enabled: true,
     registration_email_verification_required: true,
     password_login_enabled: true,
@@ -122,6 +126,8 @@ export function usePublicConfig() {
         const d = setRes.data
         settings.value = {
           site_url: (d.site_url || window.location.origin).replace(/\/+$/, ''),
+          github_url: d.github_url || 'https://github.com/Luotianyi-0712/OpenOIDC',
+          contact_info: d.contact_info || '',
           registration_enabled: d.registration_enabled !== 'false',
           registration_email_verification_required: d.registration_email_verification_required !== 'false',
           password_login_enabled: d.password_login_enabled !== 'false',

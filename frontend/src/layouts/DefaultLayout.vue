@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Fingerprint, Menu, X, ChevronDown } from 'lucide-vue-next'
+import { Fingerprint, Menu, X, ChevronDown, Github, Mail } from 'lucide-vue-next'
 import { ref, reactive } from 'vue'
 import { setLocale, currentLocale } from '@/i18n'
+import { usePublicConfig } from '@/composables/usePublicConfig'
 
 const auth = useAuthStore()
+const { settings } = usePublicConfig()
 const mobileOpen = ref(false)
 const locale = ref(currentLocale())
 
@@ -27,6 +29,7 @@ const mobileExpanded = reactive<Record<string, boolean>>({
   product: false,
   developers: false,
   links: false,
+  about: false,
 })
 
 function toggleMobileSection(key: string) {
@@ -43,7 +46,7 @@ function toggleLocale() {
 <template>
   <div class="min-h-screen">
     <nav class="fixed top-0 inset-x-0 z-50 bg-white/85 backdrop-blur-xl border-b border-border">
-      <div class="max-w-[1200px] mx-auto px-4 sm:px-6 md:px-10 h-16 flex items-center justify-between gap-3">
+      <div class="max-w-[1200px] mx-auto px-4 sm:px-6 md:px-10 h-16 flex items-center justify-between gap-3 relative">
         <!-- Brand -->
         <RouterLink to="/" class="flex items-center gap-2.5 font-bold text-lg tracking-tight shrink-0">
           <div class="w-7 h-7 bg-foreground rounded-md flex items-center justify-center text-white">
@@ -52,8 +55,8 @@ function toggleLocale() {
           OIDC
         </RouterLink>
 
-        <!-- Desktop nav dropdowns -->
-        <ul class="hidden md:flex items-center gap-6">
+        <!-- Desktop nav dropdowns (centered) -->
+        <ul class="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
           <!-- Product -->
           <li class="relative" @mouseenter="openDropdown('product')" @mouseleave="closeDropdown()">
             <button class="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors font-medium py-2">
@@ -96,6 +99,27 @@ function toggleLocale() {
             >
               <RouterLink to="/privacy" class="block px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">{{ $t('nav.privacy') }}</RouterLink>
               <RouterLink to="/terms" class="block px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">{{ $t('nav.terms') }}</RouterLink>
+            </div>
+          </li>
+
+          <!-- About Us -->
+          <li class="relative" @mouseenter="openDropdown('about')" @mouseleave="closeDropdown()">
+            <button class="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors font-medium py-2">
+              {{ $t('landing.about.title') }}
+              <ChevronDown class="w-3.5 h-3.5" />
+            </button>
+            <div
+              v-show="activeDropdown === 'about'"
+              class="absolute top-full left-0 mt-1 min-w-[200px] bg-white border border-border rounded-lg shadow-lg py-1 z-50"
+            >
+              <a :href="settings.github_url" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <Github class="w-4 h-4" />
+                {{ $t('landing.about.github') }}
+              </a>
+              <div v-if="settings.contact_info" class="flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground">
+                <Mail class="w-4 h-4" />
+                <span class="break-all">{{ settings.contact_info }}</span>
+              </div>
             </div>
           </li>
         </ul>
@@ -167,6 +191,27 @@ function toggleLocale() {
           <div v-show="mobileExpanded.links" class="pb-3 pl-4 space-y-1">
             <RouterLink to="/privacy" class="block py-2.5 text-base text-muted-foreground hover:text-foreground transition-colors" @click="mobileOpen = false">{{ $t('nav.privacy') }}</RouterLink>
             <RouterLink to="/terms" class="block py-2.5 text-base text-muted-foreground hover:text-foreground transition-colors" @click="mobileOpen = false">{{ $t('nav.terms') }}</RouterLink>
+          </div>
+        </div>
+
+        <!-- About Us -->
+        <div class="border-b border-border/50">
+          <button
+            class="flex items-center justify-between w-full py-4 text-lg font-medium"
+            @click="toggleMobileSection('about')"
+          >
+            {{ $t('landing.about.title') }}
+            <ChevronDown class="w-5 h-5 transition-transform duration-200" :class="{ 'rotate-180': mobileExpanded.about }" />
+          </button>
+          <div v-show="mobileExpanded.about" class="pb-3 pl-4 space-y-1">
+            <a :href="settings.github_url" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 py-2.5 text-base text-muted-foreground hover:text-foreground transition-colors" @click="mobileOpen = false">
+              <Github class="w-4 h-4" />
+              {{ $t('landing.about.github') }}
+            </a>
+            <div v-if="settings.contact_info" class="flex items-center gap-2 py-2.5 text-base text-muted-foreground">
+              <Mail class="w-4 h-4" />
+              <span class="break-all">{{ settings.contact_info }}</span>
+            </div>
           </div>
         </div>
 

@@ -49,6 +49,8 @@ const SMTP_KEYS = ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', '
 const DEDICATED_SETTING_KEYS = new Set([
   ...SMTP_KEYS,
   'site_url',
+  'github_url',
+  'contact_info',
   'allowed_email_domains',
   'captcha_provider',
   'captcha_site_key',
@@ -93,8 +95,10 @@ const saving = ref(false)
 const form = ref({ value: '', description: '' })
 const editingDescription = computed(() => tOrFallback(`adminSettings.descriptions.${editingKey.value}`, editingKey.value))
 
-// Site URL
+// Site info
 const siteURL = ref(window.location.origin)
+const githubURL = ref('https://github.com/Luotianyi-0712/OpenOIDC')
+const contactInfo = ref('')
 const siteSaving = ref(false)
 
 // SMTP form
@@ -161,6 +165,8 @@ async function fetchSettings() {
     // Populate domain whitelist
     for (const s of settings.value) {
       if (s.key === 'site_url') siteURL.value = s.value || window.location.origin
+      if (s.key === 'github_url') githubURL.value = s.value || 'https://github.com/Luotianyi-0712/OpenOIDC'
+      if (s.key === 'contact_info') contactInfo.value = s.value
       if (s.key === 'smtp_host') smtpForm.value.host = s.value
       if (s.key === 'smtp_port') smtpForm.value.port = s.value || '465'
       if (s.key === 'smtp_username') smtpForm.value.username = s.value
@@ -222,6 +228,14 @@ async function saveSiteURL() {
     await api.put('/admin/settings/site_url', {
       value: siteURL.value,
       description: 'Public site URL for documentation examples and public callback displays',
+    })
+    await api.put('/admin/settings/github_url', {
+      value: githubURL.value,
+      description: 'Public GitHub repository URL displayed on the landing page',
+    })
+    await api.put('/admin/settings/contact_info', {
+      value: contactInfo.value,
+      description: 'Public contact information displayed in the landing page footer',
     })
     await fetchSettings()
     await auth.fetchPublicSettings()
@@ -407,6 +421,16 @@ async function deleteAlias(id: string) {
             <label class="block text-sm font-medium mb-1.5">{{ $t('adminSettings.siteURL') }}</label>
             <input v-model="siteURL" type="url" :placeholder="$t('adminSettings.siteURLPlaceholder')" class="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-foreground/10" />
             <p class="text-xs text-muted-foreground mt-1">{{ $t('adminSettings.siteURLHint') }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">{{ $t('adminSettings.githubURL') }}</label>
+            <input v-model="githubURL" type="url" placeholder="https://github.com/Luotianyi-0712/OpenOIDC" class="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+            <p class="text-xs text-muted-foreground mt-1">{{ $t('adminSettings.githubURLHint') }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">{{ $t('adminSettings.contactInfo') }}</label>
+            <input v-model="contactInfo" type="text" :placeholder="$t('adminSettings.contactInfoPlaceholder')" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+            <p class="text-xs text-muted-foreground mt-1">{{ $t('adminSettings.contactInfoHint') }}</p>
           </div>
           <div class="flex justify-end">
             <button type="submit" :disabled="siteSaving" class="bg-foreground text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-foreground/90 transition-colors disabled:opacity-50 flex items-center gap-2">

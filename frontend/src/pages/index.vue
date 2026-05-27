@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
   ArrowRight,
@@ -13,10 +13,14 @@ import {
   Layers,
   Zap,
   Fingerprint,
+  Github,
+  Mail,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import { usePublicConfig } from '@/composables/usePublicConfig'
 
 const { t } = useI18n()
+const { settings } = usePublicConfig()
 
 const stats = computed(() => [
   { value: '10+', label: t('landing.stats.providers') },
@@ -88,6 +92,10 @@ const footerCols = computed(() => [
       { label: t('landing.footer.privacy'), to: '/privacy' },
       { label: t('landing.footer.terms'), to: '/terms' },
     ],
+  },
+  {
+    heading: t('landing.about.title'),
+    links: [],
   },
 ])
 </script>
@@ -250,13 +258,23 @@ const footerCols = computed(() => [
           <!-- Link columns -->
           <div v-for="col in footerCols" :key="col.heading">
             <h4 class="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{{ col.heading }}</h4>
-            <ul class="space-y-2.5">
+            <ul v-if="col.links.length > 0" class="space-y-2.5">
               <li v-for="link in col.links" :key="link.label">
                 <RouterLink :to="link.to" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {{ link.label }}
                 </RouterLink>
               </li>
             </ul>
+            <div v-else class="space-y-2.5">
+              <a :href="settings.github_url" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Github class="w-4 h-4" />
+                {{ $t('landing.about.github') }}
+              </a>
+              <div v-if="settings.contact_info" class="flex items-center gap-2 text-sm text-muted-foreground">
+                <Mail class="w-4 h-4" />
+                <span class="break-all">{{ settings.contact_info }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
