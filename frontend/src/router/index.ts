@@ -74,17 +74,46 @@ const router = createRouter({
   ],
 })
 
+// Loading indicator
+let loadingTimeout: ReturnType<typeof setTimeout> | null = null
+
 router.beforeEach(async (to) => {
+  // Show loading indicator after 200ms delay
+  loadingTimeout = setTimeout(() => {
+    document.body.style.cursor = 'wait'
+  }, 200)
+
   const auth = useAuthStore()
+
+  // 首次加载时获取用户信息和公共设置
   if (auth.loading) {
     await Promise.all([auth.fetchUser(), auth.fetchPublicSettings()])
-  } else if (to.meta.requiresAuth) {
-    await auth.fetchUser()
   }
-  if (to.meta.requiresAuth && !auth.isLoggedIn) return { path: '/login', query: { return_to: to.fullPath } }
-  if (auth.isLoggedIn) await auth.fetchDeveloperStatus()
+
+  // 需要认证的页面才检查用户状态
+  if (to.meta.requiresAuth && !auth.isLoggedIn) {
+    return { path: '/login', query: { return_to: to.fullPath } }
+  }
+
+  // 只在需要时获取开发者状态（且用户已登录）
+  if (auth.isLoggedIn && (to.meta.requiresDeveloper || to.path.startsWith('/developer'))) {
+    if (!auth.developerStatus) {
+      await auth.fetchDeveloperStatus()
+    }
+  }
+
+  // 权限检查
   if (to.meta.requiresAdmin && !auth.isAdmin) return '/'
   if (to.meta.requiresDeveloper && !auth.canShowDeveloperConsole) return '/me'
+})
+
+router.afterEach(() => {
+  // Clear loading indicator
+  if (loadingTimeout) {
+    clearTimeout(loadingTimeout)
+    loadingTimeout = null
+  }
+  document.body.style.cursor = ''
 })
 
 export default router

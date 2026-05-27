@@ -31,10 +31,11 @@ type AdminHandler struct {
 	sessionRepo    port.SessionRepository
 	bindingRepo    port.BindingRepository
 	consentRepo    port.ConsentRepository
+	cacheSvc       *service.CacheService
 }
 
-func NewAdminHandler(adminSvc *service.AdminService, clientSvc *service.ClientService, securitySvc *service.SecurityLevelService, userRepo port.UserRepository, socialRegistry port.SocialProviderRegistry, riskSvc *service.RiskService, sessionRepo port.SessionRepository, bindingRepo port.BindingRepository, consentRepo port.ConsentRepository) *AdminHandler {
-	return &AdminHandler{adminSvc: adminSvc, clientSvc: clientSvc, securitySvc: securitySvc, userRepo: userRepo, socialRegistry: socialRegistry, riskSvc: riskSvc, sessionRepo: sessionRepo, bindingRepo: bindingRepo, consentRepo: consentRepo}
+func NewAdminHandler(adminSvc *service.AdminService, clientSvc *service.ClientService, securitySvc *service.SecurityLevelService, userRepo port.UserRepository, socialRegistry port.SocialProviderRegistry, riskSvc *service.RiskService, sessionRepo port.SessionRepository, bindingRepo port.BindingRepository, consentRepo port.ConsentRepository, cacheSvc *service.CacheService) *AdminHandler {
+	return &AdminHandler{adminSvc: adminSvc, clientSvc: clientSvc, securitySvc: securitySvc, userRepo: userRepo, socialRegistry: socialRegistry, riskSvc: riskSvc, sessionRepo: sessionRepo, bindingRepo: bindingRepo, consentRepo: consentRepo, cacheSvc: cacheSvc}
 }
 
 func (h *AdminHandler) ensureCanManageTargetUser(ctx context.Context, targetID uuid.UUID, allowSelf bool) (*domain.User, error) {
@@ -1366,6 +1367,14 @@ func (h *AdminHandler) DeleteAliasRestriction(w http.ResponseWriter, r *http.Req
 
 // PublicSettings returns login/registration settings without requiring auth.
 func (h *AdminHandler) PublicSettings(w http.ResponseWriter, r *http.Request) {
+	// Try to get from cache first
+	if h.cacheSvc != nil {
+		if cached, err := h.cacheSvc.GetPublicSettings(r.Context()); err == nil {
+			JSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
 	keys := []string{
 		"site_url",
 		"github_url",
@@ -1396,6 +1405,12 @@ func (h *AdminHandler) PublicSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		result[key] = setting.Value
 	}
+
+	// Cache the result
+	if h.cacheSvc != nil {
+		_ = h.cacheSvc.SetPublicSettings(r.Context(), result)
+	}
+
 	JSON(w, http.StatusOK, result)
 }
 
@@ -1450,6 +1465,13 @@ func (h *AdminHandler) UpdateSetting(w http.ResponseWriter, r *http.Request) {
 		mapAdminError(w, err)
 		return
 	}
+
+	// Invalidate cache after updating setting
+	if h.cacheSvc != nil {
+		_ = h.cacheSvc.InvalidatePublicSettings(r.Context())
+		_ = h.cacheSvc.InvalidateSetting(r.Context(), key)
+	}
+
 	JSON(w, http.StatusOK, map[string]any{"updated": true})
 }
 

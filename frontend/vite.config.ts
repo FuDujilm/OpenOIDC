@@ -10,6 +10,26 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('vue') || id.includes('pinia')) {
+              return 'vue-vendor'
+            }
+            if (id.includes('vue-i18n')) {
+              return 'i18n'
+            }
+            if (id.includes('lucide-vue-next')) {
+              return 'icons'
+            }
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
   server: {
     port: 5173,
     proxy: {

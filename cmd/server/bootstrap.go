@@ -154,6 +154,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 	emailSender := smtp.NewSender(cfg.SMTP, baseURL, settingsRepo)
 
 	// Services.
+	cacheSvc := service.NewCacheService(cache)
 	securitySvc := service.NewSecurityLevelService(ruleRepo, bindingRepo, userRepo, auditRepo)
 	authSvc := service.NewAuthService(userRepo, sessionRepo, cache, auditRepo, emailSender, settingsRepo, cfg)
 	sessionSvc := service.NewSessionService(sessionRepo, userRepo, cfg)
@@ -189,7 +190,7 @@ func bootstrap(ctx context.Context, cfg *config.Config) (router.Deps, func(), er
 	authHandler := handler.NewAuthHandler(authSvc, sessionSvc, cfg.Session)
 	socialHandler := handler.NewSocialHandler(socialSvc, socialRegistry, sessionSvc, cfg.Session)
 	userInfoHandler := handler.NewUserInfoHandler(userRepo, socialSvc, securitySvc, accessCtrl, authSvc, sessionSvc, consentRepo, auditRepo)
-	adminHandler := handler.NewAdminHandler(adminSvc, clientSvc, securitySvc, userRepo, socialRegistry, riskSvc, sessionRepo, bindingRepo, consentRepo)
+	adminHandler := handler.NewAdminHandler(adminSvc, clientSvc, securitySvc, userRepo, socialRegistry, riskSvc, sessionRepo, bindingRepo, consentRepo, cacheSvc)
 	oidcHandler := handler.NewOIDCHandler(provider, userRepo, clientSvc, accessCtrl, sessionSvc, settingsRepo, cfg.Server, "/login")
 	oidcHandler.SetCache(cache)
 	wellKnownHandler := handler.NewWellKnownHandler(cfg.Server.BaseURL, settingsRepo, signingKeyRepo)

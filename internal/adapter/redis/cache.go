@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -17,6 +18,11 @@ const (
 	prefixRateLimit     = "rate_limit:"
 	prefixEmailVerify   = "email_verify:"
 	prefixPasswordReset = "pwd_reset:"
+	prefixUser          = "user:"
+	prefixUserByEmail   = "user_email:"
+	prefixSettings      = "settings:"
+	prefixPublicSettings = "public_settings"
+	prefixProviders     = "providers"
 )
 
 type Cache struct {
@@ -69,6 +75,139 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
 
 func (c *Cache) Delete(ctx context.Context, key string) error {
 	return c.client.Del(ctx, key).Err()
+}
+
+func (c *Cache) DeletePattern(ctx context.Context, pattern string) error {
+	iter := c.client.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		if err := c.client.Del(ctx, iter.Val()).Err(); err != nil {
+			return err
+		}
+	}
+	return iter.Err()
+}
+
+// ---------------------------------------------------------------------------
+// User cache
+// ---------------------------------------------------------------------------
+
+func (c *Cache) SetUser(ctx context.Context, userID uuid.UUID, data interface{}, ttl time.Duration) error {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, prefixUser+userID.String(), bytes, ttl).Err()
+}
+
+func (c *Cache) GetUser(ctx context.Context, userID uuid.UUID) ([]byte, error) {
+	data, err := c.client.Get(ctx, prefixUser+userID.String()).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, port.ErrNotFound
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
+func (c *Cache) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	return c.client.Del(ctx, prefixUser+userID.String()).Err()
+}
+
+func (c *Cache) SetUserByEmail(ctx context.Context, email string, userID uuid.UUID, ttl time.Duration) error {
+	return c.client.Set(ctx, prefixUserByEmail+email, userID.String(), ttl).Err()
+}
+
+func (c *Cache) GetUserByEmail(ctx context.Context, email string) (uuid.UUID, error) {
+	val, err := c.client.Get(ctx, prefixUserByEmail+email).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return uuid.Nil, port.ErrNotFound
+		}
+		return uuid.Nil, err
+	}
+	return uuid.Parse(val)
+}
+
+func (c *Cache) DeleteUserByEmail(ctx context.Context, email string) error {
+	return c.client.Del(ctx, prefixUserByEmail+email).Err()
+}
+
+// ---------------------------------------------------------------------------
+// Settings cache
+// ---------------------------------------------------------------------------
+
+func (c *Cache) SetPublicSettings(ctx context.Context, data interface{}, ttl time.Duration) error {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, prefixPublicSettings, bytes, ttl).Err()
+}
+
+func (c *Cache) GetPublicSettings(ctx context.Context) ([]byte, error) {
+	data, err := c.client.Get(ctx, prefixPublicSettings).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, port.ErrNotFound
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
+func (c *Cache) DeletePublicSettings(ctx context.Context) error {
+	return c.client.Del(ctx, prefixPublicSettings).Err()
+}
+
+func (c *Cache) SetSetting(ctx context.Context, key string, value string, ttl time.Duration) error {
+	return c.client.Set(ctx, prefixSettings+key, value, ttl).Err()
+}
+
+func (c *Cache) GetSetting(ctx context.Context, key string) (string, error) {
+	val, err := c.client.Get(ctx, prefixSettings+key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", port.ErrNotFound
+		}
+		return "", err
+	}
+	return val, nil
+}
+
+func (c *Cache) DeleteSetting(ctx context.Context, key string) error {
+	return c.client.Del(ctx, prefixSettings+key).Err()
+}
+
+func (c *Cache) InvalidateAllSettings(ctx context.Context) error {
+	return c.DeletePattern(ctx, prefixSettings+"*")
+}
+
+// ---------------------------------------------------------------------------
+// Provider cache
+// ---------------------------------------------------------------------------
+
+func (c *Cache) SetProviders(ctx context.Context, data interface{}, ttl time.Duration) error {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, prefixProviders, bytes, ttl).Err()
+}
+
+func (c *Cache) GetProviders(ctx context.Context) ([]byte, error) {
+	data, err := c.client.Get(ctx, prefixProviders).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, port.ErrNotFound
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
+func (c *Cache) DeleteProviders(ctx context.Context) error {
+	return c.client.Del(ctx, prefixProviders).Err()
 }
 
 // ---------------------------------------------------------------------------
