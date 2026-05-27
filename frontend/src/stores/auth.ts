@@ -28,6 +28,11 @@ export interface DeveloperStatus {
   requires_email_verify: boolean
 }
 
+interface AuthStatus {
+  authenticated: boolean
+  expires_at?: string
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const loading = ref(true)
@@ -43,10 +48,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchUser() {
     try {
+      const status = await api.get<AuthStatus>('/auth/status')
+      if (!status.data?.authenticated) {
+        user.value = null
+        developerStatus.value = null
+        return
+      }
       const res = await api.get<User>('/me')
       user.value = res.data!
     } catch {
       user.value = null
+      developerStatus.value = null
     } finally {
       loading.value = false
     }

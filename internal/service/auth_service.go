@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/mail"
 	"net/netip"
+	"regexp"
 	"strings"
 	"time"
 
@@ -464,6 +465,10 @@ func (s *AuthService) checkAuthRisk(ctx context.Context, action, email, ip strin
 		s.auditRiskBlock(ctx, userID, action, ip, "email_domain", domain)
 		return ErrRiskBlocked
 	}
+	if isRegistrationRiskAction(action) && emailMatchesPatternList(email, s.settingValue(ctx, "risk_blocked_email_patterns")) {
+		s.auditRiskBlock(ctx, userID, action, ip, "email_pattern", email)
+		return ErrRiskBlocked
+	}
 	if ipMatchesList(ip, s.settingValue(ctx, "risk_blocked_ips")) {
 		s.auditRiskBlock(ctx, userID, action, ip, "ip", ip)
 		return ErrRiskBlocked
@@ -502,6 +507,32 @@ func emailDomain(email string) string {
 		return ""
 	}
 	return strings.ToLower(strings.TrimSpace(parts[1]))
+}
+
+func isRegistrationRiskAction(action string) bool {
+	switch action {
+	case "register", "register_code", "social_register":
+		return true
+	default:
+		return false
+	}
+}
+
+func emailMatchesPatternList(email, raw string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return false
+	}
+	for _, item := range splitRiskList(raw) {
+		re, err := regexp.Compile(item)
+		if err != nil {
+			continue
+		}
+		if re.MatchString(email) {
+			return true
+		}
+	}
+	return false
 }
 
 func ipMatchesList(ip, raw string) bool {

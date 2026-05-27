@@ -42,6 +42,7 @@ interface RiskPolicy {
   blocked_ips: string
   blocked_emails: string
   blocked_email_domains: string
+  blocked_email_patterns: string
 }
 
 const tab = ref<'reports' | 'blacklist' | 'policy'>('reports')
@@ -54,6 +55,7 @@ const riskPolicyEnabled = ref(true)
 const blockedIPs = ref('')
 const blockedEmails = ref('')
 const blockedEmailDomains = ref('')
+const blockedEmailPatterns = ref('')
 const policyLoading = ref(false)
 const policySaving = ref(false)
 const policyLoaded = ref(false)
@@ -111,6 +113,7 @@ async function loadPolicySettings() {
       blockedIPs.value = policy.blocked_ips || ''
       blockedEmails.value = policy.blocked_emails || ''
       blockedEmailDomains.value = policy.blocked_email_domains || ''
+      blockedEmailPatterns.value = policy.blocked_email_patterns || ''
     }
     policyLoaded.value = true
   } catch (e: any) {
@@ -133,6 +136,7 @@ async function savePolicySettings() {
       blocked_ips: blockedIPs.value,
       blocked_emails: blockedEmails.value,
       blocked_email_domains: blockedEmailDomains.value,
+      blocked_email_patterns: blockedEmailPatterns.value,
     })
     toast.success(t('adminRisk.policySaved'))
     await loadPolicySettings()
@@ -376,7 +380,7 @@ function userLabel(uid?: number, email?: string, fallback?: string | null): stri
       <div v-if="policyLoading" class="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
         <Loader2 class="w-4 h-4 animate-spin" /> {{ $t('loading') }}
       </div>
-      <form @submit.prevent="savePolicySettings" class="grid gap-4 lg:grid-cols-3">
+      <form @submit.prevent="savePolicySettings" class="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <div class="rounded-xl border border-border p-4 bg-white">
           <label class="block text-sm font-medium mb-1.5">{{ $t('adminRisk.blockedIPs') }}</label>
           <p class="text-xs text-muted-foreground mb-3">{{ $t('adminRisk.blockedIPsHint') }}</p>
@@ -410,7 +414,18 @@ function userLabel(uid?: number, email?: string, fallback?: string | null): stri
           />
         </div>
 
-        <div class="lg:col-span-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="rounded-xl border border-border p-4 bg-white">
+          <label class="block text-sm font-medium mb-1.5">{{ $t('adminRisk.blockedEmailPatterns') }}</label>
+          <p class="text-xs text-muted-foreground mb-3">{{ $t('adminRisk.blockedEmailPatternsHint') }}</p>
+          <textarea
+            v-model="blockedEmailPatterns"
+            rows="8"
+            placeholder="^[^@]*[.+][^@]*@"
+            class="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-foreground/10 resize-y"
+          />
+        </div>
+
+        <div class="lg:col-span-2 xl:col-span-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p class="text-xs text-muted-foreground">{{ $t('adminRisk.policyFormatHint') }}</p>
           <div class="flex gap-2">
             <button type="button" @click="loadPolicySettings" :disabled="policySaving" class="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50">

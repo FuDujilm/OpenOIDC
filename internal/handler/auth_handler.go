@@ -111,6 +111,21 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	JSON(w, http.StatusOK, map[string]any{"logged_out": true})
 }
 
+func (h *AuthHandler) Status(w http.ResponseWriter, r *http.Request) {
+	token := extractSessionTokenFromRequest(r, h.sessionCfg.CookieName)
+	if token == "" {
+		JSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		return
+	}
+	sess, err := h.sessionSvc.ValidateSession(r.Context(), token)
+	if err != nil {
+		h.clearSessionCookie(w)
+		JSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{"authenticated": true, "expires_at": sess.ExpiresAt})
+}
+
 func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	var req tokenRequest
 	if err := DecodeJSON(r, &req); err != nil {

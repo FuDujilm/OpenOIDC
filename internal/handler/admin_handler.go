@@ -1411,17 +1411,19 @@ type updateSettingRequest struct {
 }
 
 type riskPolicyResponse struct {
-	Enabled             bool   `json:"enabled"`
-	BlockedIPs          string `json:"blocked_ips"`
-	BlockedEmails       string `json:"blocked_emails"`
-	BlockedEmailDomains string `json:"blocked_email_domains"`
+	Enabled              bool   `json:"enabled"`
+	BlockedIPs           string `json:"blocked_ips"`
+	BlockedEmails        string `json:"blocked_emails"`
+	BlockedEmailDomains  string `json:"blocked_email_domains"`
+	BlockedEmailPatterns string `json:"blocked_email_patterns"`
 }
 
 type updateRiskPolicyRequest struct {
-	Enabled             bool   `json:"enabled"`
-	BlockedIPs          string `json:"blocked_ips"`
-	BlockedEmails       string `json:"blocked_emails"`
-	BlockedEmailDomains string `json:"blocked_email_domains"`
+	Enabled              bool   `json:"enabled"`
+	BlockedIPs           string `json:"blocked_ips"`
+	BlockedEmails        string `json:"blocked_emails"`
+	BlockedEmailDomains  string `json:"blocked_email_domains"`
+	BlockedEmailPatterns string `json:"blocked_email_patterns"`
 }
 
 func (h *AdminHandler) ListSettings(w http.ResponseWriter, r *http.Request) {
@@ -1483,10 +1485,11 @@ func (h *AdminHandler) GetRiskPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSON(w, http.StatusOK, riskPolicyResponse{
-		Enabled:             value("risk_policy_enabled", "true") != "false",
-		BlockedIPs:          value("risk_blocked_ips", ""),
-		BlockedEmails:       value("risk_blocked_emails", ""),
-		BlockedEmailDomains: value("risk_blocked_email_domains", ""),
+		Enabled:              value("risk_policy_enabled", "true") != "false",
+		BlockedIPs:           value("risk_blocked_ips", ""),
+		BlockedEmails:        value("risk_blocked_emails", ""),
+		BlockedEmailDomains:  value("risk_blocked_email_domains", ""),
+		BlockedEmailPatterns: value("risk_blocked_email_patterns", `^[^@]*[.+][^@]*@`),
 	})
 }
 
@@ -1510,6 +1513,7 @@ func (h *AdminHandler) UpdateRiskPolicy(w http.ResponseWriter, r *http.Request) 
 		{"risk_blocked_ips", strings.TrimSpace(req.BlockedIPs), "Blocked IPv4, IPv6, or CIDR list"},
 		{"risk_blocked_emails", strings.TrimSpace(req.BlockedEmails), "Blocked email address list"},
 		{"risk_blocked_email_domains", strings.TrimSpace(req.BlockedEmailDomains), "Blocked email domain list"},
+		{"risk_blocked_email_patterns", strings.TrimSpace(req.BlockedEmailPatterns), "Blocked email regular expressions"},
 	}
 	for _, update := range updates {
 		if err := h.adminSvc.UpdateSetting(r.Context(), update.key, update.value, update.desc, adminID); err != nil {

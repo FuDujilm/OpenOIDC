@@ -306,7 +306,9 @@ func (s *SocialService) CompleteSocialLogin(ctx context.Context, provider string
 		}
 
 		if info.Email != "" {
-			// Check email domain whitelist for social registration.
+			if err := s.checkEmailRisk(ctx, info.Email, ip); err != nil {
+				return nil, nil, err
+			}
 			if err := s.checkEmailDomainAllowed(ctx, info.Email); err != nil {
 				return nil, nil, err
 			}
@@ -416,6 +418,49 @@ func (s *SocialService) isSettingEnabled(ctx context.Context, key string) bool {
 		return true
 	}
 	return setting.Value != "false"
+}
+
+func (s *SocialService) checkEmailRisk(ctx context.Context, email, ip string) error {
+	if !s.isSettingEnabled(ctx, "risk_policy_enabled") {
+		return nil
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email != "" && listContainsFold(s.settingValue(ctx, "risk_blocked_emails"), email) {
+		s.auditRiskBlock(ctx, "social_register", ip, "email", email)
+		return ErrRiskBlocked
+	}
+	if domain := emailDomain(email); domain != "" && listContainsFold(s.settingValue(ctx, "risk_blocked_email_domains"), domain) {
+		s.auditRiskBlock(ctx, "social_register", ip, "email_domain", domain)
+		return ErrRiskBlocked
+	}
+	if isRegistrationRiskAction("social_register") && emailMatchesPatternList(email, s.settingValue(ctx, "risk_blocked_email_patterns")) {
+		s.auditRiskBlock(ctx, "social_register", ip, "email_pattern", email)
+		return ErrRiskBlocked
+	}
+	return nil
+}
+
+func (s *SocialService) settingValue(ctx context.Context, key string) string {
+	if s.settingsRepo == nil {
+		return ""
+	}
+	setting, err := s.settingsRepo.Get(ctx, key)
+	if err != nil || setting == nil {
+		return ""
+	}
+	return strings.TrimSpace(setting.Value)
+}
+
+func (s *SocialService) auditRiskBlock(ctx context.Context, action, ip, reason, value string) {
+	var ipPtr *string
+	if ip != "" {
+		ipPtr = &ip
+	}
+	s.audit(ctx, nil, "risk.auth_blocked", "risk", action, ipPtr, map[string]any{
+		"action": action,
+		"reason": reason,
+		"value":  value,
+	})
 }
 
 // checkEmailDomainAllowed validates that the email domain is in the allowed list.

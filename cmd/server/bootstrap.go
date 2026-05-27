@@ -424,6 +424,7 @@ func seedSettings(ctx context.Context, repo port.SettingsRepository, cfg *config
 		"risk_blocked_ips":                         "",
 		"risk_blocked_emails":                      "",
 		"risk_blocked_email_domains":               "",
+		"risk_blocked_email_patterns":              `^[^@]*[.+][^@]*@`,
 		"passkey_enabled":                          "true",
 	}
 	for key, value := range defaults {

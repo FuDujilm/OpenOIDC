@@ -78,6 +78,7 @@ func NewRouter(d Deps) *chi.Mux {
 			r.With(mw.Turnstile(d.SettingsRepo)).Post("/register/code", d.AuthHandler.SendRegisterCode)
 			r.With(mw.Turnstile(d.SettingsRepo)).Post("/register", d.AuthHandler.Register)
 			r.With(mw.Turnstile(d.SettingsRepo)).Post("/login", d.AuthHandler.Login)
+			r.Get("/status", d.AuthHandler.Status)
 			r.Post("/logout", d.AuthHandler.Logout)
 			r.Post("/verify-email", d.AuthHandler.VerifyEmail)
 			r.With(mw.Turnstile(d.SettingsRepo)).Post("/forgot-password", d.AuthHandler.ForgotPassword)
