@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
-import { Loader2, X, User, Building2, Link as LinkIcon, ExternalLink, Flag } from 'lucide-vue-next'
+import { Loader2, X, User, Building2, Link as LinkIcon, ExternalLink, Flag, ShieldAlert } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
 
@@ -15,6 +15,7 @@ interface AuthorizedApp {
   description: string
   logo_url: string
   homepage_url: string
+  min_security_level: number
   developer: {
     id: string
     uid: number
@@ -136,6 +137,10 @@ async function submitReport() {
               <User class="w-3 h-3" />
               <span>{{ app.developer.display_name }}</span>
             </div>
+            <div class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldAlert class="w-3 h-3" />
+              <span>{{ $t('authorizedApps.minSecurityLevel') }}: {{ app.min_security_level ?? 0 }}</span>
+            </div>
             <div v-if="app.scopes && app.scopes.length" class="mt-2 flex flex-wrap gap-1">
               <span
                 v-for="scope in app.scopes"
@@ -214,6 +219,14 @@ async function submitReport() {
                 {{ detailTarget.homepage_url }}
                 <ExternalLink class="w-3 h-3 shrink-0" />
               </a>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-2">
+            <ShieldAlert class="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+            <div class="flex-1 min-w-0">
+              <div class="text-xs text-muted-foreground">{{ $t('authorizedApps.minSecurityLevel') }}</div>
+              <div class="font-medium mt-0.5">{{ detailTarget.min_security_level ?? 0 }}</div>
             </div>
           </div>
 

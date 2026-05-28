@@ -61,7 +61,8 @@ type UserAuthorization struct {
 		DisplayName string    `json:"display_name"`
 		AvatarURL   string    `json:"avatar_url"`
 	} `json:"developer"`
-	Scopes     []string  `json:"scopes"`
-	GrantedAt  time.Time `json:"granted_at"`
-	LastUsedAt time.Time `json:"last_used_at"`
+	MinSecurityLevel int       `json:"min_security_level"`
+	Scopes           []string  `json:"scopes"`
+	GrantedAt        time.Time `json:"granted_at"`
+	LastUsedAt       time.Time `json:"last_used_at"`
 }

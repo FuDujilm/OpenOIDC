@@ -2,17 +2,21 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { AlertTriangle, ShieldX, XCircle } from 'lucide-vue-next'
+import { AlertTriangle, ShieldX, XCircle, ShieldAlert, MailWarning } from 'lucide-vue-next'
 
 const route = useRoute()
 const { t } = useI18n()
 
 const errorType = ref('')
 const appName = ref('')
+const requiredLevel = ref('')
+const currentLevel = ref('')
 
 onMounted(() => {
   errorType.value = (route.query.type as string) || 'unknown'
   appName.value = (route.query.app as string) || ''
+  requiredLevel.value = (route.query.required as string) || ''
+  currentLevel.value = (route.query.current as string) || ''
 })
 
 function getErrorInfo() {
@@ -30,6 +34,20 @@ function getErrorInfo() {
         title: t('error.appNotFound.title'),
         description: t('error.appNotFound.description'),
         color: 'text-red-600'
+      }
+    case 'security_level_insufficient':
+      return {
+        icon: ShieldAlert,
+        title: t('error.securityLevelInsufficient.title'),
+        description: t('error.securityLevelInsufficient.description', { app: appName.value, required: requiredLevel.value, current: currentLevel.value }),
+        color: 'text-orange-600'
+      }
+    case 'email_not_verified':
+      return {
+        icon: MailWarning,
+        title: t('error.emailNotVerified.title'),
+        description: t('error.emailNotVerified.description', { app: appName.value }),
+        color: 'text-blue-600'
       }
     default:
       return {

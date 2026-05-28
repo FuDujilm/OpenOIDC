@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { api } from '@/api/client'
-import { Plus, Pencil, Trash2, Loader2, RefreshCw, X, MinusCircle, Copy } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, Loader2, RefreshCw, X, MinusCircle, Copy, Download, Upload } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import ConditionItemEditor from '@/components/ConditionItemEditor.vue'
 
@@ -99,6 +99,26 @@ const deletingRule = ref<SecurityRule | null>(null)
 const deleting = ref(false)
 
 const recomputing = ref(false)
+
+const importPlaceholder = `[
+  {
+    "name": "Example",
+    "level": 1,
+    "priority": 0,
+    "conditions": { "operator": "AND", "items": [] },
+    "is_active": true
+  }
+]`
+
+const showExportModal = ref(false)
+const exportText = ref('')
+const exportCopied = ref(false)
+
+const showImportModal = ref(false)
+const importText = ref('')
+const importing = ref(false)
+const importError = ref('')
+const importResult = ref<{ created: number; failed: number; errors: string[] } | null>(null)
 
 const providerOptions = [
   'github', 'google', 'gitlab', 'gitee', 'linuxdo', 'discord',
@@ -524,6 +544,117 @@ async function recomputeAll() {
   }
 }
 
+function openExport() {
+  const payload = rules.value.map(rule => ({
+    name: rule.name,
+    description: rule.description,
+    level: rule.level,
+    priority: rule.priority,
+    conditions: ruleConditionsForExport(rule),
+    is_active: rule.is_active,
+  }))
+  exportText.value = JSON.stringify(payload, null, 2)
+  exportCopied.value = false
+  showExportModal.value = true
+}
+
+function ruleConditionsForExport(rule: SecurityRule) {
+  const operator = rule.conditions?.operator || 'AND'
+  if (rule.conditions?.items && rule.conditions.items.length > 0) {
+    return { operator, items: rule.conditions.items }
+  }
+  if (rule.conditions?.rules && rule.conditions.rules.length > 0) {
+    const items = rule.conditions.rules.map(c => ({ condition: c }))
+    return { operator, items }
+  }
+  return { operator, items: [] }
+}
+
+async function copyExport() {
+  try {
+    await navigator.clipboard.writeText(exportText.value)
+    exportCopied.value = true
+    setTimeout(() => (exportCopied.value = false), 2000)
+  } catch {
+    /* ignore — user can still select-copy */
+  }
+}
+
+function openImport() {
+  importText.value = ''
+  importError.value = ''
+  importResult.value = null
+  showImportModal.value = true
+}
+
+async function runImport() {
+  importError.value = ''
+  importResult.value = null
+  let parsed: any
+  try {
+    parsed = JSON.parse(importText.value)
+  } catch (e: any) {
+    importError.value = t('adminRules.importInvalidJson')
+    return
+  }
+  const list: any[] = Array.isArray(parsed) ? parsed : [parsed]
+  if (list.length === 0) {
+    importError.value = t('adminRules.importEmpty')
+    return
+  }
+  importing.value = true
+  let created = 0
+  let failed = 0
+  const errors: string[] = []
+  for (const item of list) {
+    const payload = sanitizeImportItem(item)
+    if (!payload) {
+      failed++
+      errors.push(t('adminRules.importInvalidItem', { name: item?.name || '?' }))
+      continue
+    }
+    try {
+      await api.post('/admin/security-rules', payload)
+      created++
+    } catch (e: any) {
+      failed++
+      errors.push(`${payload.name}: ${e?.message || 'error'}`)
+    }
+  }
+  importing.value = false
+  importResult.value = { created, failed, errors }
+  if (failed === 0) {
+    await fetchRules()
+    setTimeout(() => { showImportModal.value = false }, 1200)
+  } else {
+    await fetchRules()
+  }
+}
+
+function sanitizeImportItem(item: any) {
+  if (!item || typeof item !== 'object') return null
+  if (typeof item.name !== 'string' || !item.name.trim()) return null
+  if (typeof item.level !== 'number') return null
+  const conditions = item.conditions || {}
+  let items: ConditionItem[] = []
+  if (Array.isArray(conditions.items) && conditions.items.length > 0) {
+    items = conditions.items
+  } else if (Array.isArray(conditions.rules) && conditions.rules.length > 0) {
+    items = conditions.rules.map((c: RuleCondition) => ({ condition: c }))
+  }
+  return {
+    name: item.name.trim(),
+    description: typeof item.description === 'string' ? item.description : '',
+    level: item.level,
+    priority: typeof item.priority === 'number' ? item.priority : 0,
+    conditions: {
+      operator: conditions.operator === 'OR' ? 'OR' : 'AND',
+      items: buildConditionItems(items),
+    },
+    is_active: item.is_active !== false,
+  }
+}
+
 function conditionSummary(rule: SecurityRule) {
   // Support new nested structure
   if (rule.conditions?.items && rule.conditions.items.length > 0) {
@@ -592,6 +723,12 @@ function formatValue(cond: RuleCondition) {
         <p class="text-sm text-muted-foreground mt-1">{{ $t('adminRules.subtitle') }}</p>
       </div>
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button @click="openImport" class="border border-border px-4 py-2 rounded-full text-sm font-medium hover:bg-muted transition-colors flex items-center justify-center gap-2">
+          <Upload class="w-4 h-4" /> {{ $t('adminRules.import') }}
+        </button>
+        <button @click="openExport" :disabled="rules.length === 0" class="border border-border px-4 py-2 rounded-full text-sm font-medium hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+          <Download class="w-4 h-4" /> {{ $t('adminRules.export') }}
+        </button>
         <button @click="recomputeAll" :disabled="recomputing" class="border border-border px-4 py-2 rounded-full text-sm font-medium hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
           <RefreshCw class="w-4 h-4" :class="recomputing ? 'animate-spin' : ''" /> {{ $t('adminRules.recompute') }}
         </button>
@@ -775,6 +912,58 @@ function formatValue(cond: RuleCondition) {
           <button @click="showDeleteModal = false" class="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors w-full sm:w-auto">{{ $t('cancel') }}</button>
           <button @click="deleteRule" :disabled="deleting" class="bg-destructive text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 w-full sm:w-auto">
             <Loader2 v-if="deleting" class="w-4 h-4 animate-spin" /> {{ $t('delete') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showExportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 py-4" @click.self="showExportModal = false">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">{{ $t('adminRules.exportTitle') }}</h2>
+          <button @click="showExportModal = false" class="text-muted-foreground hover:text-foreground"><X class="w-5 h-5" /></button>
+        </div>
+        <p class="text-sm text-muted-foreground mb-3">{{ $t('adminRules.exportDesc') }}</p>
+        <textarea
+          v-model="exportText"
+          readonly
+          rows="14"
+          class="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono resize-y bg-muted/30"
+          @focus="($event.target as HTMLTextAreaElement).select()"
+        ></textarea>
+        <div class="flex flex-col-reverse gap-2 mt-4 sm:flex-row sm:justify-end">
+          <button @click="showExportModal = false" class="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors w-full sm:w-auto">{{ $t('close') }}</button>
+          <button @click="copyExport" class="bg-foreground text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-foreground/90 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
+            <Copy class="w-4 h-4" /> {{ exportCopied ? $t('adminRules.copied') : $t('adminRules.copyJson') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 py-4" @click.self="showImportModal = false">
+      <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">{{ $t('adminRules.importTitle') }}</h2>
+          <button @click="showImportModal = false" class="text-muted-foreground hover:text-foreground"><X class="w-5 h-5" /></button>
+        </div>
+        <p class="text-sm text-muted-foreground mb-3">{{ $t('adminRules.importDesc') }}</p>
+        <textarea
+          v-model="importText"
+          rows="12"
+          :placeholder="importPlaceholder"
+          class="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono resize-y focus:outline-none focus:ring-2 focus:ring-foreground/10"
+        ></textarea>
+        <div v-if="importError" class="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">{{ importError }}</div>
+        <div v-if="importResult" class="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+          <div class="font-medium">{{ $t('adminRules.importResult', { created: importResult.created, failed: importResult.failed }) }}</div>
+          <ul v-if="importResult.errors.length" class="mt-1 list-disc list-inside text-destructive">
+            <li v-for="(err, i) in importResult.errors" :key="i" class="break-words">{{ err }}</li>
+          </ul>
+        </div>
+        <div class="flex flex-col-reverse gap-2 mt-4 sm:flex-row sm:justify-end">
+          <button @click="showImportModal = false" class="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors w-full sm:w-auto">{{ $t('cancel') }}</button>
+          <button @click="runImport" :disabled="importing || !importText.trim()" class="bg-foreground text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-foreground/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 w-full sm:w-auto">
+            <Loader2 v-if="importing" class="w-4 h-4 animate-spin" /> {{ $t('adminRules.import') }}
           </button>
         </div>
       </div>

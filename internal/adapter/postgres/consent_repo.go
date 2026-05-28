@@ -22,7 +22,7 @@ func NewConsentRepo(db *pgxpool.Pool) *ConsentRepo {
 func (r *ConsentRepo) ListAuthorizedApps(ctx context.Context, userID uuid.UUID) ([]*domain.UserAuthorization, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT DISTINCT ON (auth.client_id)
-		        auth.client_id, oc.name, oc.description, oc.logo_url, oc.homepage_url,
+		        auth.client_id, oc.name, oc.description, oc.logo_url, oc.homepage_url, oc.min_security_level,
 		        u.id, u.uid, u.display_name, u.avatar_url, auth.created_at as granted_at
 			 FROM (
 			   SELECT client_id, subject, created_at FROM oauth2_access_tokens WHERE active = true
@@ -43,23 +43,25 @@ func (r *ConsentRepo) ListAuthorizedApps(ctx context.Context, userID uuid.UUID) 
 	for rows.Next() {
 		var clientID, clientName string
 		var description, logoURL, homepageURL *string
+		var minSecurityLevel int
 		var devID *uuid.UUID
 		var devUID *int64
 		var devDisplayName, devAvatarURL *string
 		var grantedAt time.Time
 
-		if err := rows.Scan(&clientID, &clientName, &description, &logoURL, &homepageURL,
+		if err := rows.Scan(&clientID, &clientName, &description, &logoURL, &homepageURL, &minSecurityLevel,
 			&devID, &devUID, &devDisplayName, &devAvatarURL, &grantedAt); err != nil {
 			continue
 		}
 
 		auth := &domain.UserAuthorization{
-			ID:         uuid.New(),
-			UserID:     userID,
-			ClientID:   clientID,
-			ClientName: clientName,
-			GrantedAt:  grantedAt,
-			LastUsedAt: grantedAt,
+			ID:               uuid.New(),
+			UserID:           userID,
+			ClientID:         clientID,
+			ClientName:       clientName,
+			MinSecurityLevel: minSecurityLevel,
+			GrantedAt:        grantedAt,
+			LastUsedAt:       grantedAt,
 		}
 
 		if description != nil {

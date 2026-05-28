@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/client'
-import { User, Mail, Shield, KeyRound, RefreshCw, HelpCircle, Building2, Link as LinkIcon } from 'lucide-vue-next'
+import { User, Mail, Shield, KeyRound, RefreshCw, HelpCircle, Building2, Link as LinkIcon, ShieldAlert } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -19,6 +19,7 @@ interface ConsentContext {
     description: string
     logo_url: string
     homepage_url: string
+    min_security_level: number
   }
   developer: {
     name: string
@@ -141,6 +142,11 @@ async function handleDeny() {
               rel="noopener noreferrer"
               class="font-mono text-foreground truncate hover:underline"
             >{{ consent.client.homepage_url }}</a>
+          </div>
+          <div v-if="consent.client.min_security_level > 0" class="flex items-center gap-2 min-w-0">
+            <ShieldAlert class="w-3.5 h-3.5 shrink-0" />
+            <span class="shrink-0">{{ $t('authorize.minSecurityLevel') }}</span>
+            <span class="text-foreground font-medium">{{ consent.client.min_security_level }}</span>
           </div>
         </div>
       </div>

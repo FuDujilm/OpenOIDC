@@ -22,7 +22,7 @@ func NewConsentRepo(db *sql.DB) *ConsentRepo {
 // Uses the subject column in oauth2_sessions to filter by user.
 func (r *ConsentRepo) ListAuthorizedApps(ctx context.Context, userID uuid.UUID) ([]*domain.UserAuthorization, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT os.client_id, oc.client_name, oc.description, oc.logo_url, oc.homepage_url,
+		`SELECT os.client_id, oc.client_name, oc.description, oc.logo_url, oc.homepage_url, oc.min_security_level,
 		        u.id, u.uid, u.display_name, u.avatar_url, MIN(os.created_at) as granted_at
 			 FROM oauth2_sessions os
 			 JOIN oidc_clients oc ON oc.client_id = os.client_id
@@ -41,24 +41,26 @@ func (r *ConsentRepo) ListAuthorizedApps(ctx context.Context, userID uuid.UUID) 
 	for rows.Next() {
 		var clientID, clientName string
 		var description, logoURL, homepageURL sql.NullString
+		var minSecurityLevel int
 		var devID sql.NullString
 		var devUID sql.NullInt64
 		var devDisplayName, devAvatarURL sql.NullString
 		var createdAt sql.NullString
 
-		if err := rows.Scan(&clientID, &clientName, &description, &logoURL, &homepageURL,
+		if err := rows.Scan(&clientID, &clientName, &description, &logoURL, &homepageURL, &minSecurityLevel,
 			&devID, &devUID, &devDisplayName, &devAvatarURL, &createdAt); err != nil {
 			continue
 		}
 
 		auth := &domain.UserAuthorization{
-			ID:          uuid.New(),
-			UserID:      userID,
-			ClientID:    clientID,
-			ClientName:  clientName,
-			Description: description.String,
-			LogoURL:     logoURL.String,
-			HomepageURL: homepageURL.String,
+			ID:               uuid.New(),
+			UserID:           userID,
+			ClientID:         clientID,
+			ClientName:       clientName,
+			Description:      description.String,
+			LogoURL:          logoURL.String,
+			HomepageURL:      homepageURL.String,
+			MinSecurityLevel: minSecurityLevel,
 		}
 
 		// Parse developer info

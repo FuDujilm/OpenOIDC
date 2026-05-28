@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -69,6 +70,7 @@ type consentChallenge struct {
 	Scopes            []string `json:"scopes"`
 	RedirectURI       string   `json:"redirect_uri"`
 	RequestURL        string   `json:"request_url"`
+	MinSecurityLevel  int      `json:"min_security_level"`
 }
 
 // Authorize handles GET /oauth2/authorize.
@@ -114,13 +116,14 @@ func (h *OIDCHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user.SecurityLevel < client.MinSecurityLevel {
-		h.provider.WriteAuthorizeError(ctx, w, ar,
-			fosite.ErrAccessDenied.WithHint("security level insufficient for this client"))
+		errorURL := fmt.Sprintf("/error?type=security_level_insufficient&app=%s&required=%d&current=%d",
+			url.QueryEscape(client.ClientName), client.MinSecurityLevel, user.SecurityLevel)
+		http.Redirect(w, r, errorURL, http.StatusFound)
 		return
 	}
 	if client.RequireEmailVerified && !user.EmailVerified {
-		h.provider.WriteAuthorizeError(ctx, w, ar,
-			fosite.ErrAccessDenied.WithHint("email verification required for this client"))
+		errorURL := "/error?type=email_not_verified&app=" + url.QueryEscape(client.ClientName)
+		http.Redirect(w, r, errorURL, http.StatusFound)
 		return
 	}
 
@@ -152,6 +155,7 @@ func (h *OIDCHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 			Scopes:            ar.GetRequestedScopes(),
 			RedirectURI:       redirectURI,
 			RequestURL:        r.URL.RequestURI(),
+			MinSecurityLevel:  client.MinSecurityLevel,
 		}
 		token, err := h.storeConsentChallenge(r, challenge)
 		if err != nil {
@@ -371,11 +375,12 @@ func (h *OIDCHandler) ConsentContext(w http.ResponseWriter, r *http.Request) {
 	}
 	JSON(w, http.StatusOK, map[string]any{
 		"client": map[string]any{
-			"client_id":    challenge.ClientID,
-			"name":         challenge.ClientName,
-			"description":  challenge.ClientDescription,
-			"logo_url":     challenge.ClientLogoURL,
-			"homepage_url": challenge.WebsiteURL,
+			"client_id":          challenge.ClientID,
+			"name":               challenge.ClientName,
+			"description":        challenge.ClientDescription,
+			"logo_url":           challenge.ClientLogoURL,
+			"homepage_url":       challenge.WebsiteURL,
+			"min_security_level": challenge.MinSecurityLevel,
 		},
 		"developer": map[string]any{
 			"name": developerName,

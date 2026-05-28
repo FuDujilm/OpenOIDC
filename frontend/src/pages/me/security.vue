@@ -8,7 +8,12 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 interface MissingCondition {
-  provider: string
+  type?: string
+  provider?: string
+  field?: string
+  operator?: string
+  value?: string | number | boolean
+  values?: string[]
   min_binding_days: number
   is_bound: boolean
   is_satisfied: boolean
@@ -115,15 +120,96 @@ const developerAccessHint = computed(() => {
 })
 
 function providerLabel(provider: string): string {
+  if (!provider) return t('adminRules.anyProvider')
   const key = `adminRules.providerOptions.${provider}`
   const translated = t(key)
   return translated !== key ? translated : provider
+}
+
+function fieldLabelText(field: string): string {
+  if (!field) return ''
+  const key = `adminRules.fieldOptions.${field}`
+  const translated = t(key)
+  return translated !== key ? translated : field
+}
+
+function operatorLabel(op?: string): string {
+  if (!op) return ''
+  const key = `adminRules.operatorOptions.${op}`
+  const translated = t(key)
+  return translated !== key ? translated : op
+}
+
+function formatCondValue(cond: MissingCondition): string {
+  if (Array.isArray(cond.values) && cond.values.length) return cond.values.join(', ')
+  if (typeof cond.value === 'boolean') return cond.value ? t('yes') : t('no')
+  if (cond.value === undefined || cond.value === null) return ''
+  return String(cond.value)
+}
+
+function conditionTitle(cond: MissingCondition): string {
+  const provider = providerLabel(cond.provider || '')
+  const type = cond.type || (cond.min_binding_days > 0 ? 'binding_age_days' : 'provider_bound')
+  switch (type) {
+    case 'provider_bound':
+      return cond.provider
+        ? t('security.bindProvider', { provider })
+        : t('security.bindAnyProvider')
+    case 'binding_age_days': {
+      const days = cond.min_binding_days || Number(cond.value) || 0
+      return cond.provider
+        ? t('security.bindProviderDays', { provider, days })
+        : t('security.bindAnyProviderDays', { days })
+    }
+    case 'provider_account_age_days': {
+      const days = cond.min_binding_days || Number(cond.value) || 0
+      return t('security.providerAccountAgeDays', { provider, days })
+    }
+    case 'provider_email_verified':
+      return t('security.providerEmailVerified', { provider })
+    case 'provider_email_domain':
+      return t('security.providerEmailDomain', { provider, domains: formatCondValue(cond) })
+    case 'provider_raw_number':
+    case 'provider_raw_string':
+    case 'provider_raw_bool':
+      return t('security.providerRawField', {
+        provider,
+        field: fieldLabelText(cond.field || ''),
+        op: operatorLabel(cond.operator),
+        value: formatCondValue(cond),
+      })
+    case 'user_email_domain':
+      return t('security.userEmailDomain', { domains: formatCondValue(cond) })
+    case 'user_created_age_days': {
+      const days = cond.min_binding_days || Number(cond.value) || 0
+      return t('security.userCreatedAgeDays', { days })
+    }
+    case 'user_has_verified_email':
+      return t('security.userHasVerifiedEmail')
+    default:
+      return cond.provider ? t('security.bindProvider', { provider }) : type
+  }
+}
+
+function conditionHint(cond: MissingCondition): string {
+  const type = cond.type || (cond.min_binding_days > 0 ? 'binding_age_days' : 'provider_bound')
+  if (type === 'binding_age_days' && cond.min_binding_days > 0) {
+    if (cond.is_bound) {
+      return t('security.boundDays', { current: cond.bound_days, required: cond.min_binding_days })
+    }
+    return t('security.requireDays', { days: cond.min_binding_days })
+  }
+  return ''
 }
 
 function conditionState(cond: MissingCondition): 'completed' | 'partial' | 'incomplete' {
   if (cond.is_satisfied) return 'completed'
   if (cond.is_bound) return 'partial'
   return 'incomplete'
+}
+
+function conditionKey(cond: MissingCondition, index: number): string {
+  return `${cond.type || ''}-${cond.provider || ''}-${cond.field || ''}-${index}`
 }
 </script>
 
@@ -215,8 +301,8 @@ function conditionState(cond: MissingCondition): 'completed' | 'partial' | 'inco
         <p class="text-xs text-muted-foreground mb-4">{{ $t('security.nextLevelDesc', { name: info.next_level.rule_name }) }}</p>
         <div class="space-y-2">
           <div
-            v-for="cond in info.next_level.missing"
-            :key="cond.provider"
+            v-for="(cond, idx) in info.next_level.missing"
+            :key="conditionKey(cond, idx)"
             class="flex items-center gap-3 px-4 py-3 rounded-lg"
             :class="{
               'bg-green-50': conditionState(cond) === 'completed',
@@ -244,15 +330,10 @@ function conditionState(cond: MissingCondition): 'completed' | 'partial' | 'inco
                   'text-foreground': conditionState(cond) === 'incomplete',
                 }"
               >
-                {{ $t('security.bindProvider', { provider: providerLabel(cond.provider) }) }}
+                {{ conditionTitle(cond) }}
               </div>
-              <div v-if="cond.min_binding_days > 0" class="text-xs text-muted-foreground">
-                <template v-if="cond.is_bound">
-                  {{ $t('security.boundDays', { current: cond.bound_days, required: cond.min_binding_days }) }}
-                </template>
-                <template v-else>
-                  {{ $t('security.requireDays', { days: cond.min_binding_days }) }}
-                </template>
+              <div v-if="conditionHint(cond)" class="text-xs text-muted-foreground">
+                {{ conditionHint(cond) }}
               </div>
             </div>
             <span
