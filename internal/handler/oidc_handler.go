@@ -193,10 +193,13 @@ func (h *OIDCHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session := oidcprovider.NewSession(user.ID.String(), user.SecurityLevel, h.publicIssuer(r), client.ClientID, user.ID.String())
+	avatarURL := resolvedAvatarURL(user)
 	oidcprovider.AddCustomClaims(session, map[string]any{
 		"email":          user.Email,
 		"email_verified": user.EmailVerified,
 		"name":           user.DisplayName,
+		"avatar_url":     avatarURL,
+		"picture":        avatarURL,
 		"security_level": user.SecurityLevel,
 		"alias":          user.Alias,
 	})
@@ -329,12 +332,14 @@ func (h *OIDCHandler) UserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	avatarURL := resolvedAvatarURL(user)
 	payload := map[string]any{
 		"sub":            user.ID.String(),
 		"email":          user.Email,
 		"email_verified": user.EmailVerified,
 		"name":           user.DisplayName,
-		"avatar_url":     user.AvatarURL,
+		"avatar_url":     avatarURL,
+		"picture":        avatarURL,
 		"alias":          user.Alias,
 		"security_level": user.SecurityLevel,
 	}

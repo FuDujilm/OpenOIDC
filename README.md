@@ -127,15 +127,15 @@ npm run build
 cd ..
 
 go build -o oidc ./cmd/server
-./oidc    # uses configs/config.yaml (SQLite by default)
+./oidc    # uses configs/config.yaml (PostgreSQL by default)
 ```
 
 On Windows you can also run `start.bat` or build `oidc.exe`.
 
 ## Configuration
 
-- `configs/config.yaml` — main config, supports both SQLite and PostgreSQL.
-- `configs/config.sqlite.yaml` — minimal SQLite-only override.
+- `configs/config.yaml` — main PostgreSQL config.
+- `configs/config.sqlite.yaml` — optional SQLite-only override for local experiments.
 - `.env` — environment overrides loaded by Docker Compose; see `.env.example`.
 
 Every YAML key can be overridden via `OIDC_*` environment variables, e.g. `OIDC_DATABASE_DRIVER=postgres`.

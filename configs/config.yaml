@@ -8,8 +8,8 @@ server:
   shutdown_timeout: 30s
 
 database:
-  driver: sqlite
-  dsn: data/oidc.db
+  driver: postgres
+  dsn: ""
   host: localhost
   port: 5432
   user: oidc

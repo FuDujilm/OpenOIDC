@@ -362,6 +362,7 @@ func (h *UserInfoHandler) RevokeAuthorizedApp(w http.ResponseWriter, r *http.Req
 }
 
 func userPayload(u *domain.User) map[string]any {
+	avatarURL := resolvedAvatarURL(u)
 	return map[string]any{
 		"id":             u.ID,
 		"uid":            u.UID,
@@ -369,7 +370,7 @@ func userPayload(u *domain.User) map[string]any {
 		"email_verified": u.EmailVerified,
 		"display_name":   u.DisplayName,
 		"alias":          u.Alias,
-		"avatar_url":     u.AvatarURL,
+		"avatar_url":     avatarURL,
 		"security_level": u.SecurityLevel,
 		"role":           u.Role,
 		"status":         u.Status,

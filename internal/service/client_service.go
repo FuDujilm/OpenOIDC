@@ -374,13 +374,22 @@ func validateRedirectURIs(redirectURIs []string, required bool) error {
 		seen[value] = struct{}{}
 
 		u, err := url.Parse(value)
-		if err != nil || u.Scheme == "" || u.Host == "" || u.Fragment != "" {
+		if err != nil || u.Scheme == "" {
 			return fmt.Errorf("%w: invalid redirect_uri", ErrInvalidInput)
 		}
+		// Allow http/https for web, and custom schemes for mobile apps
 		switch u.Scheme {
 		case "http", "https":
+			// Web redirect URIs must have a host and no fragment
+			if u.Host == "" || u.Fragment != "" {
+				return fmt.Errorf("%w: invalid redirect_uri", ErrInvalidInput)
+			}
 		default:
-			return fmt.Errorf("%w: redirect_uri must use http or https", ErrInvalidInput)
+			// Mobile app custom schemes (e.g., com.beacontoolkit://)
+			// Allow any scheme with valid format
+			if u.Fragment != "" {
+				return fmt.Errorf("%w: redirect_uri cannot contain fragment", ErrInvalidInput)
+			}
 		}
 	}
 	return nil

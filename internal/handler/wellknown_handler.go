@@ -41,7 +41,7 @@ func (h *WellKnownHandler) Discovery(w http.ResponseWriter, r *http.Request) {
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post", "none"},
 		"claims_supported": []string{
 			"sub", "iss", "aud", "exp", "iat",
-			"email", "email_verified", "name", "avatar_url", "alias", "security_level",
+			"email", "email_verified", "name", "avatar_url", "picture", "alias", "security_level",
 		},
 		"code_challenge_methods_supported": []string{"plain", "S256"},
 	}

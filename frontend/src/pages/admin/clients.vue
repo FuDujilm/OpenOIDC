@@ -200,7 +200,7 @@ async function saveClient() {
   saving.value = true
   error.value = ''
   try {
-    const payload = {
+    const payload: any = {
       client_name: form.value.client_name,
       description: form.value.description,
       logo_url: form.value.logo_url,
@@ -215,8 +215,13 @@ async function saveClient() {
       require_email_verified: form.value.require_email_verified,
       protocol_type: form.value.protocol_type,
       is_confidential: form.value.is_confidential,
-      is_active: form.value.is_active,
     }
+
+    // is_active 只在更新时发送，创建时由后端自动设置为 true
+    if (!isCreate.value) {
+      payload.is_active = form.value.is_active
+    }
+
     if (isCreate.value) {
       const res = await api.post<Client>('/admin/clients', payload)
       showModal.value = false
