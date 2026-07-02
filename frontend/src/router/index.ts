@@ -72,6 +72,10 @@ const router = createRouter({
       component: () => import('@/pages/error.vue'),
     },
     {
+      path: '/native-callback/beacon-toolkit',
+      component: () => import('@/pages/native-callback.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       component: () => import('@/pages/not-found.vue'),
     },
